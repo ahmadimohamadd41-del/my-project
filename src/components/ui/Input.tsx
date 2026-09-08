@@ -1,4 +1,4 @@
-import { forwardRef, useState } from 'react'
+import { forwardRef } from 'react'
 import { cn } from '@/utils/cn'
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -13,7 +13,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="w-full">
         {label && (
-          <label htmlFor={inputId} className="block text-sm font-medium text-gray-200 mb-1">
+          <label htmlFor={inputId} className="block text-sm font-semibold text-gray-200 mb-2">
             {label}
           </label>
         )}
@@ -21,16 +21,17 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           ref={ref}
           className={cn(
-            'w-full px-3 py-2 bg-gray-800/50 border border-gray-700 rounded-lg',
-            'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500',
-            'placeholder:text-gray-500',
-            error ? 'border-red-500' : 'border-gray-700',
+            'w-full px-4 py-3 bg-navy-900/60 border rounded-xl',
+            'text-white placeholder:text-gray-500',
+            'transition-all duration-200',
+            'focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50',
+            error ? 'border-error-500/60' : 'border-navy-600/50',
             className
           )}
           {...props}
         />
         {error && (
-          <p className="mt-1 text-sm text-red-400">{error}</p>
+          <p className="mt-1.5 text-sm text-error-400">{error}</p>
         )}
       </div>
     )

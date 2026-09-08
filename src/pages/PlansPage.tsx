@@ -6,7 +6,6 @@ import Card from '@/components/ui/Card'
 import Input from '@/components/ui/Input'
 import { Link } from 'react-router-dom'
 
-// تایپ برای تنظیمات پرداخت
 interface PaymentSettings {
   card_number: string
   card_holder_name: string
@@ -25,7 +24,6 @@ export default function PlansPage() {
     card_holder_name: '',
   })
 
-  // بارگذاری تنظیمات کارت از API
   const loadSettings = async () => {
     try {
       const res = await fetch('https://varminiapp.popserver.shop/api/?action=payment_settings')
@@ -62,7 +60,6 @@ export default function PlansPage() {
   const handlePurchase = async () => {
     if (!selectedPlan) return
 
-    // اول از Auth، اگر نبود مستقیم از تلگرام
     const telegramId =
       Number(user?.telegram_id) ||
       Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) ||
@@ -110,15 +107,18 @@ export default function PlansPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+      <div className="min-h-screen flex items-center justify-center app-bg">
+        <div className="relative inline-flex">
+          <div className="w-14 h-14 rounded-full border-2 border-primary-500/20"></div>
+          <div className="absolute inset-0 w-14 h-14 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-right p-4 lg:p-6">
-      <div className="max-w-6xl mx-auto">
+    <div className="min-h-screen app-bg text-right p-4 lg:p-6">
+      <div className="max-w-6xl mx-auto animate-fade-in">
         <header className="mb-6">
           <Link to="/">
             <Button variant="ghost" size="sm">
@@ -131,22 +131,24 @@ export default function PlansPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {plans.map((plan) => (
-            <Card key={plan.id} className="flex flex-col p-6">
+            <Card key={plan.id} className="flex flex-col p-6 group">
               <div className="mb-4">
-                <h3 className="text-xl font-semibold text-white">{plan.display_name || plan.plan_code}</h3>
-                <p className="text-gray-400 mt-1">
+                <h3 className="text-xl font-bold text-white group-hover:text-primary-300 transition-colors duration-300">
+                  {plan.display_name || plan.plan_code}
+                </h3>
+                <p className="text-gray-400 mt-1.5 text-sm">
                   ترافیک: {formatQuota(plan.quota_bytes)}
                 </p>
               </div>
 
-              <div className="flex-1 mb-4">
-                <div className="text-center">
-                  <span className="text-3xl font-bold text-primary-500">
+              <div className="flex-1 mb-5">
+                <div className="text-center py-3 rounded-xl bg-navy-900/40 border border-navy-700/30">
+                  <span className="text-3xl font-bold bg-gradient-to-r from-primary-400 to-accent-400 bg-clip-text text-transparent">
                     {plan.price_amount ? plan.price_amount.toLocaleString() : '0'}
                   </span>
-                  <span className="text-gray-400 mr-2">تومان</span>
+                  <span className="text-gray-400 mr-2 text-sm">تومان</span>
                 </div>
-                <p className="text-center text-gray-500 text-sm mt-1">
+                <p className="text-center text-gray-500 text-sm mt-2">
                   مدت: {Math.round((plan.duration_seconds || 2592000) / 86400)} روز
                 </p>
               </div>
@@ -163,34 +165,39 @@ export default function PlansPage() {
 
         {/* Purchase Modal */}
         {selectedPlan && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-            <Card className="w-full max-w-md p-6">
-              <h2 className="text-xl font-semibold text-white mb-4">
+          <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4 animate-fade-in">
+            <Card className="w-full max-w-md p-6 animate-slide-up">
+              <h2 className="text-xl font-bold text-white mb-5">
                 خرید پلن: {selectedPlan.display_name}
               </h2>
 
               {successMessage ? (
-                <div className="p-4 bg-green-900/30 border border-green-500 text-green-300 rounded-lg text-center mb-4">
+                <div className="p-5 bg-success-500/10 border border-success-500/30 text-success-300 rounded-xl text-center mb-4">
+                  <svg className="w-12 h-12 mx-auto mb-3 text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                   {successMessage}
                 </div>
               ) : (
                 <>
-                  <div className="mb-6 space-y-2 text-sm text-gray-300">
-                    <div className="flex justify-between">
+                  <div className="mb-6 space-y-2.5 text-sm text-gray-300">
+                    <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
                       <span>حجم ترافیک:</span>
                       <span className="font-bold text-white">{formatQuota(selectedPlan.quota_bytes)}</span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
                       <span>مبلغ قابل پرداخت:</span>
                       <span className="font-bold text-primary-400">{selectedPlan.price_amount?.toLocaleString()} تومان</span>
                     </div>
                   </div>
 
-                  {/* ============================================================
-                      🔥 اطلاعات کارت از API (پویا)
-                      ============================================================ */}
-                  <div className="mb-6 bg-gray-800/80 p-4 rounded-lg border border-gray-700 text-xs text-gray-300 space-y-2">
-                    <p className="font-semibold text-yellow-400">اطلاعات کارت به کارت:</p>
+                  <div className="mb-6 bg-navy-900/60 p-4 rounded-xl border border-warning-500/20 text-xs text-gray-300 space-y-2">
+                    <p className="font-semibold text-warning-400 flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                      </svg>
+                      اطلاعات کارت به کارت:
+                    </p>
                     <p>
                       شماره کارت:{' '}
                       <span className="font-mono text-white">

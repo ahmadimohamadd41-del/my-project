@@ -35,7 +35,6 @@ export default function AdminDashboard() {
   const [tgId, setTgId] = useState(0)
   const [tgReady, setTgReady] = useState(false)
 
-  // صبر برای آماده شدن Telegram WebApp (مهم)
   useEffect(() => {
     let tries = 0
     const maxTries = 20
@@ -54,7 +53,7 @@ export default function AdminDashboard() {
       tries += 1
       if (tries >= maxTries) {
         setTgId(0)
-        setTgReady(true) // وب یا بدون initData
+        setTgReady(true)
         return
       }
       setTimeout(check, 100)
@@ -63,7 +62,6 @@ export default function AdminDashboard() {
     check()
   }, [])
 
-  // شناسه نهایی: اول از Auth، بعد از تلگرام
   const resolvedId = Number(user?.telegram_id || tgId || 0)
 
   const isAdmin =
@@ -73,7 +71,6 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  // Stateهای سفارش‌ها و تنظیمات
   const [tab, setTab] = useState<'orders' | 'settings'>('orders')
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
@@ -183,101 +180,126 @@ export default function AdminDashboard() {
     loadSettings()
   }, [])
 
-  // در حال بررسی دسترسی
   if (checking) {
     return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
-        <p className="text-gray-400 text-sm">در حال بررسی دسترسی...</p>
-      </div>
-    )
-  }
-
-  // دسترسی غیرمجاز
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
-        <div className="text-center">
-          <h1 className="text-xl font-bold mb-2">دسترسی غیرمجاز</h1>
-          <p className="text-gray-400 mb-2 text-sm">
-            پنل ادمین فقط برای ادمین و از داخل تلگرام در دسترس است.
-          </p>
-          <p className="text-xs text-gray-500 mb-4" dir="ltr">
-            id: {resolvedId || 'none'}
-          </p>
-          <Link to="/" className="text-blue-400 text-sm">بازگشت به خانه</Link>
+      <div className="min-h-screen app-bg flex items-center justify-center p-4">
+        <div className="relative inline-flex">
+          <div className="w-14 h-14 rounded-full border-2 border-primary-500/20"></div>
+          <div className="absolute inset-0 w-14 h-14 rounded-full border-t-2 border-primary-500 animate-spin"></div>
         </div>
       </div>
     )
   }
 
-  // پنل ادمین (UI اصلی)
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen app-bg flex items-center justify-center p-4">
+        <div className="text-center animate-fade-in">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-error-500/10 border border-error-500/20 mb-5">
+            <svg className="w-8 h-8 text-error-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h1 className="text-xl font-bold text-white mb-2">دسترسی غیرمجاز</h1>
+          <p className="text-gray-400 mb-2 text-sm">
+            پنل ادمین فقط برای ادمین و از داخل تلگرام در دسترس است.
+          </p>
+          <p className="text-xs text-gray-500 mb-5" dir="ltr">
+            id: {resolvedId || 'none'}
+          </p>
+          <Link to="/" className="text-primary-400 text-sm hover:text-primary-300 transition">بازگشت به خانه</Link>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4">
-      <div className="max-w-2xl mx-auto">
-        <h1 className="text-xl font-bold mb-1">پنل ادمین</h1>
-        <p className="text-sm text-gray-400 mb-4">مدیریت سفارش‌ها و تنظیمات پرداخت</p>
+    <div className="min-h-screen app-bg p-4">
+      <div className="max-w-2xl mx-auto animate-fade-in">
+        <h1 className="text-xl font-bold text-white mb-1">پنل ادمین</h1>
+        <p className="text-sm text-gray-400 mb-6">مدیریت سفارش‌ها و تنظیمات پرداخت</p>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex gap-2 mb-5 p-1 rounded-xl bg-navy-900/60 border border-navy-700/40 w-fit">
           <button
             onClick={() => setTab('orders')}
-            className={`px-4 py-2 rounded-lg text-sm ${tab === 'orders' ? 'bg-blue-600' : 'bg-gray-800'}`}
+            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'orders' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             سفارش‌ها
           </button>
           <button
             onClick={() => setTab('settings')}
-            className={`px-4 py-2 rounded-lg text-sm ${tab === 'settings' ? 'bg-blue-600' : 'bg-gray-800'}`}
+            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'settings' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             تنظیمات پرداخت
           </button>
         </div>
 
         {message && (
-          <div className="mb-3 p-3 rounded bg-green-900/40 text-green-300 text-sm">{message}</div>
+          <div className="mb-4 p-3.5 rounded-xl bg-success-500/10 border border-success-500/30 text-success-300 text-sm flex items-center gap-2">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            {message}
+          </div>
         )}
         {error && (
-          <div className="mb-3 p-3 rounded bg-red-900/40 text-red-300 text-sm">{error}</div>
+          <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm flex items-center gap-2">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {error}
+          </div>
         )}
 
         {tab === 'orders' && (
           <>
-            <button onClick={loadOrders} className="mb-4 px-4 py-2 rounded bg-gray-700 text-sm">
+            <button onClick={loadOrders} className="mb-5 px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300">
               بروزرسانی لیست
             </button>
 
             {loading ? (
-              <p className="text-gray-400">در حال بارگذاری...</p>
+              <div className="flex justify-center py-8">
+                <div className="relative inline-flex">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary-500/20"></div>
+                  <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                </div>
+              </div>
             ) : orders.length === 0 ? (
-              <p className="text-gray-400">سفارش pending وجود ندارد.</p>
+              <div className="glass-card rounded-2xl p-8 text-center text-gray-400">
+                <svg className="w-12 h-12 mx-auto mb-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                سفارش pending وجود ندارد.
+              </div>
             ) : (
               <div className="space-y-3">
                 {orders.map((o) => (
-                  <div key={o.id} className="p-4 rounded-xl bg-gray-800 border border-gray-700">
-                    <div className="flex justify-between gap-2 mb-2">
-                      <div className="font-bold">#{o.id}</div>
-                      <div className="text-yellow-400 text-sm">{o.status}</div>
+                  <div key={o.id} className="glass-card glass-card-hover rounded-2xl p-4">
+                    <div className="flex justify-between gap-2 mb-3">
+                      <div className="font-bold text-white">#{o.id}</div>
+                      <div className="text-warning-400 text-sm px-2.5 py-0.5 rounded-lg bg-warning-500/10 border border-warning-500/20">{o.status}</div>
                     </div>
-                    <div className="text-sm text-gray-300 space-y-1">
-                      <div>پلن: {o.plan_name || o.plan_code || o.plan_id}</div>
-                      <div>مبلغ: {Number(o.amount).toLocaleString('fa-IR')} تومان</div>
-                      <div>پیگیری: {o.reference_number || '—'}</div>
+                    <div className="text-sm text-gray-300 space-y-1.5">
+                      <div>پلن: <span className="text-white">{o.plan_name || o.plan_code || o.plan_id}</span></div>
+                      <div>مبلغ: <span className="text-primary-400 font-semibold">{Number(o.amount).toLocaleString('fa-IR')} تومان</span></div>
+                      <div>پیگیری: <span className="font-mono text-gray-400">{o.reference_number || '—'}</span></div>
                       <div>
                         کاربر: {o.first_name || '—'} {o.username ? `@${o.username}` : ''}{' '}
                         {o.telegram_id ? `(${o.telegram_id})` : ''}
                       </div>
                       <div className="text-gray-500 text-xs">{o.created_at}</div>
                     </div>
-                    <div className="flex gap-2 mt-3">
+                    <div className="flex gap-2 mt-4">
                       <button
                         onClick={() => updateOrder(o.id, 'completed')}
-                        className="flex-1 py-2 rounded bg-green-600 text-sm"
+                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-success-500 to-success-600 text-sm font-semibold hover:from-success-400 hover:to-success-500 transition-all duration-300 shadow-lg shadow-success-500/20"
                       >
                         تأیید
                       </button>
                       <button
                         onClick={() => updateOrder(o.id, 'failed')}
-                        className="flex-1 py-2 rounded bg-red-600 text-sm"
+                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20"
                       >
                         رد
                       </button>
@@ -290,61 +312,63 @@ export default function AdminDashboard() {
         )}
 
         {tab === 'settings' && (
-          <div className="space-y-4 p-4 rounded-xl bg-gray-800 border border-gray-700">
-            <h2 className="font-bold">کارت‌به‌کارت</h2>
+          <div className="glass-card rounded-2xl p-6 space-y-5">
+            <h2 className="font-bold text-white">کارت‌به‌کارت</h2>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">شماره کارت</label>
+              <label className="block text-sm text-gray-400 mb-2">شماره کارت</label>
               <input
                 value={settings.card_number}
                 onChange={(e) => setSettings({ ...settings, card_number: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white text-sm"
+                className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all"
                 placeholder="6037-...."
                 dir="ltr"
               />
             </div>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">نام صاحب کارت</label>
+              <label className="block text-sm text-gray-400 mb-2">نام صاحب کارت</label>
               <input
                 value={settings.card_holder_name}
                 onChange={(e) => setSettings({ ...settings, card_holder_name: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white text-sm"
+                className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all"
                 placeholder="نام و نام خانوادگی"
               />
             </div>
 
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-3 text-sm cursor-pointer">
               <input
                 type="checkbox"
                 checked={settings.card_to_card_enabled}
                 onChange={(e) => setSettings({ ...settings, card_to_card_enabled: e.target.checked })}
+                className="w-4 h-4 rounded accent-primary-500"
               />
               فعال بودن کارت‌به‌کارت
             </label>
 
-            <hr className="border-gray-700" />
+            <hr className="border-navy-700/50" />
 
-            <h2 className="font-bold">درگاه آنلاین (اسکلت آینده)</h2>
+            <h2 className="font-bold text-white">درگاه آنلاین (اسکلت آینده)</h2>
             <p className="text-xs text-gray-500">
               فعلاً فقط اسکلت است. وقتی درگاه واقعی وصل شد، از اینجا فعال می‌شود.
             </p>
 
-            <label className="flex items-center gap-2 text-sm">
+            <label className="flex items-center gap-3 text-sm cursor-pointer">
               <input
                 type="checkbox"
                 checked={settings.gateway_enabled}
                 onChange={(e) => setSettings({ ...settings, gateway_enabled: e.target.checked })}
+                className="w-4 h-4 rounded accent-primary-500"
               />
               فعال‌سازی درگاه (فعلاً بدون اتصال واقعی)
             </label>
 
             <div>
-              <label className="block text-sm text-gray-400 mb-1">پروایدر</label>
+              <label className="block text-sm text-gray-400 mb-2">پروایدر</label>
               <select
                 value={settings.gateway_provider}
                 onChange={(e) => setSettings({ ...settings, gateway_provider: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-gray-900 border border-gray-600 text-white text-sm"
+                className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all"
               >
                 <option value="none">none</option>
                 <option value="zarinpal">Zarinpal</option>
@@ -356,14 +380,14 @@ export default function AdminDashboard() {
             <button
               onClick={saveSettings}
               disabled={saving}
-              className="w-full py-3 rounded-lg bg-blue-600 text-sm font-medium disabled:opacity-50"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-sm font-semibold hover:from-primary-400 hover:to-primary-500 transition-all duration-300 glow-primary disabled:opacity-50"
             >
               {saving ? 'در حال ذخیره...' : 'ذخیره تنظیمات'}
             </button>
           </div>
         )}
 
-        <Link to="/" className="block text-center mt-6 text-sm text-blue-400">
+        <Link to="/" className="block text-center mt-8 text-sm text-primary-400 hover:text-primary-300 transition">
           بازگشت به خانه
         </Link>
       </div>

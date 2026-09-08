@@ -6,9 +6,7 @@ import Button from '@/components/ui/Button'
 import Card from '@/components/ui/Card'
 import UsageBar from '@/components/UsageBar'
 import { Link } from 'react-router-dom'
-import { FiAlertCircle } from 'react-icons/fi'
 
-// تایپ برای اطلاعات اشتراک از cPanel
 interface SubscriptionData {
   id: number
   plan_id: string
@@ -38,9 +36,6 @@ export default function HomePage() {
     ? (initDataUnsafe.user as any)?.id?.toString()
     : null
 
-  // ============================================================
-  // تشخیص ادمین برای نمایش دکمه پنل ادمین
-  // ============================================================
   const telegramId =
     user?.telegram_id ||
     (window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id
@@ -54,7 +49,6 @@ export default function HomePage() {
     const loadData = async () => {
       setLoading(true)
       try {
-        // گرفتن اطلاعات از VPS و cPanel همزمان
         const [accData, healthData, subData] = await Promise.all([
           externalRef ? accountsApi.getByExternalRef(externalRef) : Promise.resolve(null),
           healthApi.get(),
@@ -77,29 +71,28 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+      <div className="min-h-screen flex items-center justify-center app-bg">
+        <div className="relative inline-flex">
+          <div className="w-14 h-14 rounded-full border-2 border-primary-500/20"></div>
+          <div className="absolute inset-0 w-14 h-14 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+        </div>
       </div>
     )
   }
 
-  // ============================================================
-  // 🔥 تغییر اصلی: استفاده از subscriptionData به جای accountData
-  // ============================================================
   const hasActiveSubscription = subscriptionData?.status === 'active'
   const used = Number(subscriptionData?.quota_used_gb ?? 0)
   const total = Number(subscriptionData?.quota_limit_gb ?? 50)
   const expiryDate = subscriptionData?.expiry_date
   const planName = subscriptionData?.plan_name || subscriptionData?.plan_code || 'پلن فعال'
 
-  // اطلاعات اتصال
   const hasProvision = subscriptionData?.radius_username && subscriptionData?.radius_password
 
   return (
-    <div className="min-h-screen bg-gray-900 text-right p-4 lg:p-6">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen app-bg text-right p-4 lg:p-6">
+      <div className="max-w-4xl mx-auto animate-fade-in">
         {/* Header */}
-        <div className="flex justify-between items-center mb-6">
+        <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-2xl font-bold text-white mb-1">خوش آمدید</h1>
             {user && (
@@ -112,18 +105,18 @@ export default function HomePage() {
             {showAdmin && (
               <Link
                 to="/admin"
-                className="px-3 py-2 rounded-lg bg-blue-600 text-white text-sm hover:bg-blue-700 transition"
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-white text-sm font-semibold hover:from-primary-400 hover:to-primary-500 transition-all duration-300 glow-primary"
               >
                 پنل ادمین
               </Link>
             )}
             <Link
               to="/account"
-              className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+              className="p-2.5 rounded-xl bg-navy-800/60 hover:bg-navy-700/60 transition-all duration-300 border border-navy-700/40 hover:border-primary-500/30"
               aria-label="پروفایل"
             >
-              <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M13 5v6h6" />
+              <svg className="w-5 h-5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
               </svg>
             </Link>
           </div>
@@ -131,10 +124,10 @@ export default function HomePage() {
 
         {/* System Status */}
         {health && (
-          <Card className="mb-6 p-4">
-            <div className="flex items-center gap-4">
-              <div className={`w-3 h-3 rounded-full ${
-                health.status === 'healthy' ? 'bg-green-500' : 'bg-yellow-500'
+          <Card className="mb-6 p-4 animate-slide-up">
+            <div className="flex items-center gap-3">
+              <div className={`w-2.5 h-2.5 rounded-full ${
+                health.status === 'healthy' ? 'bg-success-500 status-pulse' : 'bg-warning-500'
               }`} />
               <span className="text-sm text-gray-300">
                 وضعیت سرویس: {health.status === 'healthy' ? 'آنلاین' : 'در حال بررسی'}
@@ -143,20 +136,17 @@ export default function HomePage() {
           </Card>
         )}
 
-        {/* ============================================================
-            🔥 اشتراک فعال — از subscriptionData
-            ============================================================ */}
         {hasActiveSubscription ? (
           <>
-            <Card className="mb-6 p-6">
-              <div className="mb-4">
-                <h2 className="text-lg font-semibold text-white mb-2">اشتراک فعال</h2>
-                <p className="text-primary-400 font-medium">
+            <Card className="mb-6 p-6 animate-slide-up">
+              <div className="mb-5">
+                <h2 className="text-lg font-bold text-white mb-1">اشتراک فعال</h2>
+                <p className="text-primary-400 font-semibold">
                   پلن: {planName}
                 </p>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-5">
                 <UsageBar
                   used={used}
                   total={total}
@@ -165,32 +155,35 @@ export default function HomePage() {
               </div>
 
               <div className="grid grid-cols-2 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-white">
+                <div className="p-3 rounded-xl bg-navy-800/40 border border-navy-700/30">
+                  <p className="text-xl font-bold text-white">
                     {expiryDate ? new Date(expiryDate).toLocaleDateString('fa-IR') : 'نامحدود'}
                   </p>
-                  <p className="text-sm text-gray-400">تاریخ انقضا</p>
+                  <p className="text-xs text-gray-400 mt-1">تاریخ انقضا</p>
                 </div>
-                <div>
-                  <p className="text-2xl font-bold text-white">
+                <div className="p-3 rounded-xl bg-navy-800/40 border border-navy-700/30">
+                  <p className="text-xl font-bold text-white">
                     {accountData?.customer?.balance?.toLocaleString() || '0'}
                   </p>
-                  <p className="text-sm text-gray-400">موجودی (تومان)</p>
+                  <p className="text-xs text-gray-400 mt-1">موجودی (تومان)</p>
                 </div>
               </div>
 
-              {/* ============================================================
-                  🔥 کارت اطلاعات اتصال
-                  ============================================================ */}
-              <div className="mt-6 p-4 rounded-xl bg-gray-800/80 border border-gray-700">
-                <div className="text-sm text-green-400 mb-3">📡 اطلاعات اتصال</div>
+              {/* Connection Info */}
+              <div className="mt-6 p-4 rounded-xl bg-navy-900/60 border border-primary-500/15">
+                <div className="text-sm text-primary-400 mb-3 font-semibold flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                  </svg>
+                  اطلاعات اتصال
+                </div>
 
                 {!hasProvision ? (
-                  <p className="text-sm text-yellow-400">
+                  <p className="text-sm text-warning-400">
                     اشتراک ثبت شده؛ فعال‌سازی سرویس در صف است.
                   </p>
                 ) : (
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-2.5 text-sm">
                     <div className="flex justify-between gap-2">
                       <span className="text-gray-400">سرور</span>
                       <span className="font-mono text-white">Server-{subscriptionData?.server_code || '49'}</span>
@@ -210,9 +203,9 @@ export default function HomePage() {
                         href={subscriptionData.config_url}
                         target="_blank"
                         rel="noreferrer"
-                        className="block text-center mt-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 transition text-white text-sm"
+                        className="block text-center mt-3 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-all duration-300 text-white text-sm font-semibold glow-primary"
                       >
-                        📥 دریافت کانفیگ
+                        دریافت کانفیگ
                       </a>
                     )}
                   </div>
@@ -227,9 +220,14 @@ export default function HomePage() {
             </Link>
           </>
         ) : (
-          <Card className="p-6">
+          <Card className="p-8 animate-slide-up">
             <div className="text-center py-8">
-              <h2 className="text-xl font-semibold text-white mb-4">اشتراک فعال ندارید</h2>
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary-500/10 border border-primary-500/20 mb-5">
+                <svg className="w-8 h-8 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-3">اشتراک فعال ندارید</h2>
               <p className="text-gray-400 mb-6">برای استفاده از سرویس VPN، لطفاً یک پلن انتخاب کنید.</p>
               <Link to="/plans">
                 <Button variant="primary" className="w-full">

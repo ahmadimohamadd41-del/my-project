@@ -47,8 +47,8 @@ export default function TelegramApp({ children }: TelegramAppProps) {
   return (
     <div
       className={cn(
-        'min-h-screen transition-colors duration-200',
-        isDark ? 'bg-gray-900 text-gray-100' : 'bg-gray-50 text-gray-900'
+        'min-h-screen transition-colors duration-300 app-bg',
+        isDark ? 'text-gray-100' : 'bg-navy-50 text-navy-900'
       )}
     >
       <div className="w-full max-w-4xl mx-auto">{children}</div>
