@@ -31,6 +31,17 @@ export default function HomePage() {
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null)
   const [health, setHealth] = useState<{ status: string; database: string } | null>(null)
   const [loading, setLoading] = useState(true)
+  const [copiedField, setCopiedField] = useState('')
+
+  const copyToClipboard = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedField(field)
+      setTimeout(() => setCopiedField(''), 2000)
+    } catch {
+      // ignore
+    }
+  }
 
   const externalRef = typeof initDataUnsafe.user === 'object'
     ? (initDataUnsafe.user as any)?.id?.toString()
@@ -170,47 +181,74 @@ export default function HomePage() {
               </div>
 
               {/* Connection Info */}
-              <div className="mt-6 p-4 rounded-xl bg-navy-900/60 border border-primary-500/15">
-                <div className="text-sm text-primary-400 mb-3 font-semibold flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
-                  </svg>
-                  اطلاعات اتصال
-                </div>
-
-                {!hasProvision ? (
-                  <p className="text-sm text-warning-400">
-                    اشتراک ثبت شده؛ فعال‌سازی سرویس در صف است.
-                  </p>
-                ) : (
-                  <div className="space-y-2.5 text-sm">
-                    <div className="flex justify-between gap-2">
-                      <span className="text-gray-400">سرور</span>
-                      <span className="font-mono text-white">Server-{subscriptionData?.server_code || '49'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-gray-400">یوزرنیم</span>
-                      <span className="font-mono text-white break-all">{subscriptionData?.radius_username}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-gray-400">پسورد</span>
-                      <span className="font-mono text-white break-all">
-                        {subscriptionData?.radius_password || '—'}
-                      </span>
-                    </div>
-                    {subscriptionData?.config_url && (
-                      <a
-                        href={subscriptionData.config_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block text-center mt-3 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-all duration-300 text-white text-sm font-semibold glow-primary"
-                      >
-                        دریافت کانفیگ
-                      </a>
-                    )}
+              {subscriptionData?.radius_username && (
+                <div className="mt-6 p-4 rounded-xl bg-navy-900/60 border border-primary-500/15">
+                  <div className="text-sm text-primary-400 mb-4 font-semibold flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                    </svg>
+                    اطلاعات اتصال
                   </div>
-                )}
-              </div>
+
+                  {!hasProvision ? (
+                    <p className="text-sm text-warning-400">
+                      اشتراک ثبت شده؛ فعال‌سازی سرویس در صف است.
+                    </p>
+                  ) : (
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between items-center gap-2">
+                        <span className="text-gray-400">سرور</span>
+                        <span className="font-mono text-white">Server-{subscriptionData?.server_code || '49'}</span>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center gap-2 mb-1">
+                          <span className="text-gray-400">یوزرنیم</span>
+                          <button
+                            onClick={() => copyToClipboard(subscriptionData?.radius_username || '', 'username')}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
+                          >
+                            {copiedField === 'username' ? 'کپی شد' : 'کپی یوزرنیم'}
+                          </button>
+                        </div>
+                        <span className="font-mono text-white break-all block bg-navy-800/40 px-3 py-2 rounded-lg border border-navy-700/30">
+                          {subscriptionData?.radius_username}
+                        </span>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between items-center gap-2 mb-1">
+                          <span className="text-gray-400">پسورد</span>
+                          <button
+                            onClick={() => copyToClipboard(subscriptionData?.radius_password || '', 'password')}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
+                          >
+                            {copiedField === 'password' ? 'کپی شد' : 'کپی پسورد'}
+                          </button>
+                        </div>
+                        <span className="font-mono text-white break-all block bg-navy-800/40 px-3 py-2 rounded-lg border border-navy-700/30">
+                          {subscriptionData?.radius_password || '—'}
+                        </span>
+                      </div>
+
+                      {subscriptionData?.config_url && !subscriptionData.config_url.includes('/config/') ? (
+                        <a
+                          href={subscriptionData.config_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block text-center mt-3 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-all duration-300 text-white text-sm font-semibold glow-primary"
+                        >
+                          دریافت کانفیگ
+                        </a>
+                      ) : (
+                        <p className="text-center mt-3 text-xs text-gray-500">
+                          کانفیگ به‌زودی
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </Card>
 
             <Link to="/plans">
