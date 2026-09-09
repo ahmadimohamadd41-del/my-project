@@ -11,6 +11,12 @@ interface PaymentSettings {
   card_holder_name: string
 }
 
+function normalizeReferenceNumber(value: string): string {
+  return value
+    .replace(/[۰-۹]/g, (digit: string) => String(digit.charCodeAt(0) - 1776))
+    .replace(/[^0-9]/g, '')
+}
+
 export default function PlansPage() {
   const { user } = useAuth()
   const [plans, setPlans] = useState<VPSPlan[]>([])
@@ -18,6 +24,7 @@ export default function PlansPage() {
   const [selectedPlan, setSelectedPlan] = useState<VPSPlan | null>(null)
   const [refNumber, setRefNumber] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [settings, setSettings] = useState<PaymentSettings>({
     card_number: '',
@@ -68,12 +75,14 @@ export default function PlansPage() {
     console.log('purchase telegramId=', telegramId, 'user=', user)
 
     if (!telegramId) {
-      alert('هویت تلگرام شناسایی نشد. لطفاً اپ را از داخل تلگرام (لینک ربات) باز کنید.')
+      setSubmitting(false)
+      setFormError('هویت تلگرام شناسایی نشد. لطفاً اپ را از داخل تلگرام (لینک ربات) باز کنید.')
       return
     }
 
-    if (!refNumber.trim()) {
-      alert('لطفاً شماره پیگیری را وارد کنید.')
+    if (!refNumber) {
+      setSubmitting(false)
+      setFormError('شماره پیگیری را وارد کنید')
       return
     }
 
@@ -92,7 +101,7 @@ export default function PlansPage() {
         setRefNumber('')
       }, 3000)
     } catch (e: any) {
-      alert('خطا در ثبت سفارش: ' + (e?.response?.data?.error || e.message))
+      setFormError('خطا در ثبت سفارش: ' + (e?.response?.data?.error || e.message))
     } finally {
       setSubmitting(false)
     }
@@ -155,7 +164,11 @@ export default function PlansPage() {
 
               <Button
                 variant="primary"
-                onClick={() => setSelectedPlan(plan)}
+                onClick={() => {
+                  setSelectedPlan(plan)
+                  setFormError('')
+                  setRefNumber('')
+                }}
               >
                 خرید پلن
               </Button>
@@ -217,8 +230,19 @@ export default function PlansPage() {
                       label="شماره پیگیری / ارجاع کارت به کارت"
                       placeholder="مثلاً: 12345678"
                       value={refNumber}
-                      onChange={e => setRefNumber(e.target.value)}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      aria-invalid={Boolean(formError)}
+                      onChange={e => {
+                        setRefNumber(normalizeReferenceNumber(e.target.value))
+                        setFormError('')
+                      }}
                     />
+                    {formError && (
+                      <p className="mt-2 text-sm text-error-400" role="alert">
+                        {formError}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex gap-3 justify-end">
