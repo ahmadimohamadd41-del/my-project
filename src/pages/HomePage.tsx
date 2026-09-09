@@ -97,7 +97,13 @@ export default function HomePage() {
   const expiryDate = subscriptionData?.expiry_date
   const planName = subscriptionData?.plan_name || subscriptionData?.plan_code || 'پلن فعال'
 
-  const hasProvision = subscriptionData?.radius_username && subscriptionData?.radius_password
+  const hasProvision = Boolean(subscriptionData?.radius_username && subscriptionData?.radius_password)
+
+  const hasPendingOrder = Boolean(
+    accountData?.purchases?.some(
+      (p) => p.status === 'pending' || p.status === 'PENDING'
+    )
+  )
 
   return (
     <div className="min-h-screen app-bg text-right p-4 lg:p-6">
@@ -180,8 +186,8 @@ export default function HomePage() {
                 </div>
               </div>
 
-              {/* Connection Info */}
-              {subscriptionData?.radius_username && (
+              {/* Connection Info — only when provisioned */}
+              {hasProvision ? (
                 <div className="mt-6 p-4 rounded-xl bg-navy-900/60 border border-primary-500/15">
                   <div className="text-sm text-primary-400 mb-4 font-semibold flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -190,63 +196,64 @@ export default function HomePage() {
                     اطلاعات اتصال
                   </div>
 
-                  {!hasProvision ? (
-                    <p className="text-sm text-warning-400">
-                      اشتراک ثبت شده؛ فعال‌سازی سرویس در صف است.
-                    </p>
-                  ) : (
-                    <div className="space-y-3 text-sm">
-                      <div className="flex justify-between items-center gap-2">
-                        <span className="text-gray-400">سرور</span>
-                        <span className="font-mono text-white">Server-{subscriptionData?.server_code || '49'}</span>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center gap-2 mb-1">
-                          <span className="text-gray-400">یوزرنیم</span>
-                          <button
-                            onClick={() => copyToClipboard(subscriptionData?.radius_username || '', 'username')}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
-                          >
-                            {copiedField === 'username' ? 'کپی شد' : 'کپی یوزرنیم'}
-                          </button>
-                        </div>
-                        <span className="font-mono text-white break-all block bg-navy-800/40 px-3 py-2 rounded-lg border border-navy-700/30">
-                          {subscriptionData?.radius_username}
-                        </span>
-                      </div>
-
-                      <div>
-                        <div className="flex justify-between items-center gap-2 mb-1">
-                          <span className="text-gray-400">پسورد</span>
-                          <button
-                            onClick={() => copyToClipboard(subscriptionData?.radius_password || '', 'password')}
-                            className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
-                          >
-                            {copiedField === 'password' ? 'کپی شد' : 'کپی پسورد'}
-                          </button>
-                        </div>
-                        <span className="font-mono text-white break-all block bg-navy-800/40 px-3 py-2 rounded-lg border border-navy-700/30">
-                          {subscriptionData?.radius_password || '—'}
-                        </span>
-                      </div>
-
-                      {subscriptionData?.config_url && !subscriptionData.config_url.includes('/config/') ? (
-                        <a
-                          href={subscriptionData.config_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="block text-center mt-3 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-all duration-300 text-white text-sm font-semibold glow-primary"
-                        >
-                          دریافت کانفیگ
-                        </a>
-                      ) : (
-                        <p className="text-center mt-3 text-xs text-gray-500">
-                          کانفیگ به‌زودی
-                        </p>
-                      )}
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-gray-400">سرور</span>
+                      <span className="font-mono text-white">Server-{subscriptionData?.server_code || '49'}</span>
                     </div>
-                  )}
+
+                    <div>
+                      <div className="flex justify-between items-center gap-2 mb-1">
+                        <span className="text-gray-400">یوزرنیم</span>
+                        <button
+                          onClick={() => copyToClipboard(subscriptionData?.radius_username || '', 'username')}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
+                        >
+                          {copiedField === 'username' ? 'کپی شد' : 'کپی یوزرنیم'}
+                        </button>
+                      </div>
+                      <span className="font-mono text-white break-all block bg-navy-800/40 px-3 py-2 rounded-lg border border-navy-700/30">
+                        {subscriptionData?.radius_username}
+                      </span>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between items-center gap-2 mb-1">
+                        <span className="text-gray-400">پسورد</span>
+                        <button
+                          onClick={() => copyToClipboard(subscriptionData?.radius_password || '', 'password')}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
+                        >
+                          {copiedField === 'password' ? 'کپی شد' : 'کپی پسورد'}
+                        </button>
+                      </div>
+                      <span className="font-mono text-white break-all block bg-navy-800/40 px-3 py-2 rounded-lg border border-navy-700/30">
+                        {subscriptionData?.radius_password || '—'}
+                      </span>
+                    </div>
+
+                    {subscriptionData?.config_url && !subscriptionData.config_url.includes('/config/') ? (
+                      <a
+                        href={subscriptionData.config_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block text-center mt-3 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-all duration-300 text-white text-sm font-semibold glow-primary"
+                      >
+                        دریافت کانفیگ
+                      </a>
+                    ) : (
+                      <p className="text-center mt-3 text-xs text-gray-500">
+                        کانفیگ به‌زودی
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Active but not yet provisioned */
+                <div className="mt-6 p-4 rounded-xl bg-warning-500/10 border border-warning-500/20">
+                  <p className="text-sm text-warning-400">
+                    اشتراک فعال است؛ فعال‌سازی سرویس در صف است. به‌زودی اطلاعات اتصال نمایش داده می‌شود.
+                  </p>
                 </div>
               )}
             </Card>
@@ -257,6 +264,23 @@ export default function HomePage() {
               </Button>
             </Link>
           </>
+        ) : hasPendingOrder ? (
+          <Card className="p-8 animate-slide-up">
+            <div className="text-center py-8">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-warning-500/10 border border-warning-500/20 mb-5">
+                <svg className="w-8 h-8 text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-3">در صف تأیید هستید</h2>
+              <p className="text-gray-400 mb-6">سفارش شما ثبت شده و در انتظار تأیید ادمین است.</p>
+              <Link to="/plans">
+                <Button variant="secondary" className="w-full">
+                  مشاهده پلن‌ها
+                </Button>
+              </Link>
+            </div>
+          </Card>
         ) : (
           <Card className="p-8 animate-slide-up">
             <div className="text-center py-8">
