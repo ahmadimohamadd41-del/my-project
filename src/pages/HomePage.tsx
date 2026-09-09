@@ -29,7 +29,7 @@ export default function HomePage() {
   const { initDataUnsafe } = useTelegram()
   const [accountData, setAccountData] = useState<VPSCustomerAccount | null>(null)
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null)
-  const [health, setHealth] = useState<{ status: string; database: string } | null>(null)
+  const [health, setHealth] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
   const [copiedField, setCopiedField] = useState('')
 
@@ -140,18 +140,41 @@ export default function HomePage() {
         </div>
 
         {/* System Status */}
-        {health && (
-          <Card className="mb-6 p-4 animate-slide-up">
-            <div className="flex items-center gap-3">
-              <div className={`w-2.5 h-2.5 rounded-full ${
-                health.status === 'healthy' ? 'bg-success-500 status-pulse' : 'bg-warning-500'
-              }`} />
-              <span className="text-sm text-gray-300">
-                وضعیت سرویس: {health.status === 'healthy' ? 'آنلاین' : 'در حال بررسی'}
-              </span>
-            </div>
-          </Card>
-        )}
+        <Card className="mb-6 p-4 animate-slide-up">
+          <div className="flex items-center gap-3">
+            {(() => {
+              const isOnline =
+                health?.status === 'ok' ||
+                health?.status === 'healthy' ||
+                health?.ok === true
+
+              if (!health && loading) {
+                return (
+                  <>
+                    <div className="w-2.5 h-2.5 rounded-full bg-warning-500" />
+                    <span className="text-sm text-gray-300">وضعیت سرویس: در حال بررسی</span>
+                  </>
+                )
+              }
+
+              if (isOnline) {
+                return (
+                  <>
+                    <div className="w-2.5 h-2.5 rounded-full bg-success-500 status-pulse" />
+                    <span className="text-sm text-gray-300">سرور آنلاین</span>
+                  </>
+                )
+              }
+
+              return (
+                <>
+                  <div className="w-2.5 h-2.5 rounded-full bg-error-500" />
+                  <span className="text-sm text-gray-300">سرور قطع / در دسترس نیست</span>
+                </>
+              )
+            })()}
+          </div>
+        </Card>
 
         {hasActiveSubscription ? (
           <>
