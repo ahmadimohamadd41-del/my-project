@@ -39,6 +39,7 @@ type AdminUser = {
     quota_limit_gb?: number
     expiry_date?: string
     radius_username?: string
+    radius_password?: string
   } | null
 }
 
@@ -109,6 +110,28 @@ export default function AdminDashboard() {
   const [rejectReason, setRejectReason] = useState('')
   const [rejectError, setRejectError] = useState('')
   const [rejecting, setRejecting] = useState(false)
+
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<number>>(new Set())
+  const [copiedUserField, setCopiedUserField] = useState('')
+
+  const togglePasswordVisibility = (tgId: number) => {
+    setVisiblePasswords((prev) => {
+      const next = new Set(prev)
+      if (next.has(tgId)) next.delete(tgId)
+      else next.add(tgId)
+      return next
+    })
+  }
+
+  const copyUserField = async (text: string, field: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedUserField(field)
+      setTimeout(() => setCopiedUserField(''), 2000)
+    } catch {
+      // ignore
+    }
+  }
 
   const loadOrders = async () => {
     setLoading(true)
@@ -436,7 +459,50 @@ export default function AdminDashboard() {
                           <>
                             <div>حجم: <span className="font-mono text-white">{sub?.quota_used_gb ?? '0'} / {sub?.quota_limit_gb ?? '0'} GB</span></div>
                             <div>انقضا: <span className="text-white">{sub?.expiry_date ? new Date(sub.expiry_date).toLocaleDateString('fa-IR') : '—'}</span></div>
-                            <div>یوزرنیم: <span className="font-mono text-white break-all">{sub?.radius_username || '—'}</span></div>
+                            <div>
+                              <div className="flex justify-between items-center gap-2 mb-1">
+                                <span className="text-gray-400">یوزرنیم</span>
+                                {sub?.radius_username && (
+                                  <button
+                                    onClick={() => copyUserField(sub.radius_username!, `user-${u.telegram_id}`)}
+                                    className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
+                                  >
+                                    {copiedUserField === `user-${u.telegram_id}` ? 'کپی شد' : 'کپی یوزرنیم'}
+                                  </button>
+                                )}
+                              </div>
+                              <span className="font-mono text-white break-all block bg-navy-800/40 px-3 py-2 rounded-lg border border-navy-700/30">
+                                {sub?.radius_username || '—'}
+                              </span>
+                            </div>
+                            <div>
+                              <div className="flex justify-between items-center gap-2 mb-1">
+                                <span className="text-gray-400">پسورد</span>
+                                <div className="flex gap-1.5">
+                                  {sub?.radius_password && (
+                                    <button
+                                      onClick={() => togglePasswordVisibility(u.telegram_id)}
+                                      className="text-xs px-2.5 py-1 rounded-lg bg-navy-700/40 text-gray-300 hover:bg-navy-700/60 transition-all duration-200 border border-navy-600/40"
+                                    >
+                                      {visiblePasswords.has(u.telegram_id) ? 'مخفی' : 'نمایش'}
+                                    </button>
+                                  )}
+                                  {sub?.radius_password && (
+                                    <button
+                                      onClick={() => copyUserField(sub.radius_password!, `pass-${u.telegram_id}`)}
+                                      className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
+                                    >
+                                      {copiedUserField === `pass-${u.telegram_id}` ? 'کپی شد' : 'کپی پسورد'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="font-mono text-white break-all block bg-navy-800/40 px-3 py-2 rounded-lg border border-navy-700/30">
+                                {sub?.radius_password
+                                  ? (visiblePasswords.has(u.telegram_id) ? sub.radius_password : '••••••')
+                                  : '—'}
+                              </span>
+                            </div>
                           </>
                         )}
                         <div>وضعیت: <span className={hasSub ? 'text-success-400' : 'text-gray-500'}>{hasSub ? 'فعال' : 'غیرفعال'}</span></div>
