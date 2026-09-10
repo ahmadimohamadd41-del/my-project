@@ -32,6 +32,7 @@ type AdminUser = {
   last_name?: string
   username?: string
   subscription?: {
+    id?: number
     plan_name?: string
     plan_code?: string
     status?: string
@@ -113,6 +114,41 @@ export default function AdminDashboard() {
 
   const [visiblePasswords, setVisiblePasswords] = useState<Set<number>>(new Set())
   const [copiedUserField, setCopiedUserField] = useState('')
+
+  const [actionLoading, setActionLoading] = useState<Record<number, string | null>>({})
+  const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<number | null>(null)
+  const [userActionMessage, setUserActionMessage] = useState<Record<number, { type: 'ok' | 'error'; text: string } | null>>({})
+
+  const performUserAction = async (
+    tgId: number,
+    subscriptionId: number,
+    action: 'admin_suspend_sub' | 'admin_resume_sub' | 'admin_delete_sub',
+    successMsg: string
+  ) => {
+    setActionLoading((prev) => ({ ...prev, [tgId]: action }))
+    setUserActionMessage((prev) => ({ ...prev, [tgId]: null }))
+    try {
+      const res = await fetch(`${API}/?action=${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          subscription_id: subscriptionId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setUserActionMessage((prev) => ({ ...prev, [tgId]: { type: 'ok', text: successMsg } }))
+        await loadUsers()
+      } else {
+        setUserActionMessage((prev) => ({ ...prev, [tgId]: { type: 'error', text: data.error || 'خطا در عملیات' } }))
+      }
+    } catch (e: any) {
+      setUserActionMessage((prev) => ({ ...prev, [tgId]: { type: 'error', text: e?.message || 'خطای شبکه' } }))
+    } finally {
+      setActionLoading((prev) => ({ ...prev, [tgId]: null }))
+    }
+  }
 
   const togglePasswordVisibility = (tgId: number) => {
     setVisiblePasswords((prev) => {
@@ -505,8 +541,46 @@ export default function AdminDashboard() {
                             </div>
                           </>
                         )}
-                        <div>وضعیت: <span className={hasSub ? 'text-success-400' : 'text-gray-500'}>{hasSub ? 'فعال' : 'غیرفعال'}</span></div>
+                        <div>وضعیت: <span className={hasSub ? 'text-success-400' : sub?.status === 'suspended' ? 'text-warning-400' : 'text-gray-500'}>{hasSub ? 'فعال' : sub?.status === 'suspended' ? 'قطع شده' : 'غیرفعال'}</span></div>
                       </div>
+
+                      {sub?.id && (
+                        <>
+                          {userActionMessage[u.telegram_id] && (
+                            <div className={`mt-3 p-3 rounded-xl text-sm ${userActionMessage[u.telegram_id]!.type === 'ok' ? 'bg-success-500/10 border border-success-500/30 text-success-300' : 'bg-error-500/10 border border-error-500/30 text-error-300'}`}>
+                              {userActionMessage[u.telegram_id]!.text}
+                            </div>
+                          )}
+
+                          <div className="flex gap-2 mt-4">
+                            {sub.status === 'active' && (
+                              <button
+                                onClick={() => performUserAction(u.telegram_id, sub.id!, 'admin_suspend_sub', 'سرویس قطع شد')}
+                                disabled={!!actionLoading[u.telegram_id]}
+                                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-warning-500 to-warning-600 text-sm font-semibold hover:from-warning-400 hover:to-warning-500 transition-all duration-300 shadow-lg shadow-warning-500/20 disabled:opacity-50"
+                              >
+                                {actionLoading[u.telegram_id] === 'admin_suspend_sub' ? 'در حال انجام...' : 'قطع سرویس'}
+                              </button>
+                            )}
+                            {sub.status === 'suspended' && (
+                              <button
+                                onClick={() => performUserAction(u.telegram_id, sub.id!, 'admin_resume_sub', 'سرویس فعال شد')}
+                                disabled={!!actionLoading[u.telegram_id]}
+                                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-success-500 to-success-600 text-sm font-semibold hover:from-success-400 hover:to-success-500 transition-all duration-300 shadow-lg shadow-success-500/20 disabled:opacity-50"
+                              >
+                                {actionLoading[u.telegram_id] === 'admin_resume_sub' ? 'در حال انجام...' : 'فعال‌سازی'}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setConfirmDeleteUserId(u.telegram_id)}
+                              disabled={!!actionLoading[u.telegram_id]}
+                              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
+                            >
+                              {actionLoading[u.telegram_id] === 'admin_delete_sub' ? 'در حال انجام...' : 'حذف اشتراک'}
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )
                 })}
@@ -632,6 +706,43 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Delete Subscription Confirm Modal */}
+        {confirmDeleteUserId !== null && (() => {
+          const userToDelete = users.find((u) => u.telegram_id === confirmDeleteUserId)
+          const subId = userToDelete?.subscription?.id
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+              <div className="glass-card rounded-2xl p-6 w-full max-w-md">
+                <h3 className="text-lg font-bold text-white mb-2">حذف اشتراک</h3>
+                <p className="text-sm text-gray-400 mb-5">
+                  آیا مطمئنید می‌خواهید اشتراک {userToDelete?.subscription?.radius_username || userToDelete?.first_name || confirmDeleteUserId} را حذف کنید؟ این عمل برگشت‌پذیر نیست.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setConfirmDeleteUserId(null)}
+                    disabled={!!actionLoading[confirmDeleteUserId]}
+                    className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 hover:border-navy-600 transition-all duration-300 disabled:opacity-50"
+                  >
+                    انصراف
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (subId) {
+                        performUserAction(confirmDeleteUserId, subId, 'admin_delete_sub', 'اشتراک حذف شد')
+                        setConfirmDeleteUserId(null)
+                      }
+                    }}
+                    disabled={!!actionLoading[confirmDeleteUserId]}
+                    className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
+                  >
+                    بله، حذف کن
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         <Link to="/" className="block text-center mt-8 text-sm text-primary-400 hover:text-primary-300 transition">
           بازگشت به خانه
