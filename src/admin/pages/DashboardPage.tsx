@@ -477,7 +477,11 @@ export default function AdminDashboard() {
               <div className="space-y-3">
                 {users.map((u) => {
                   const sub = u.subscription
-                  const hasSub = sub && sub.status === 'active'
+                  // ✅ FIX: شامل suspended هم بشه
+                  const hasSub = sub && (sub.status === 'active' || sub.status === 'suspended')
+                  // ✅ FIX: وضعیت واقعی کاربر
+                  const isActive = sub && sub.status === 'active'
+                  const isSuspended = sub && sub.status === 'suspended'
                   return (
                     <div key={u.telegram_id} className="glass-card glass-card-hover rounded-2xl p-4">
                       <div className="flex justify-between gap-2 mb-3">
@@ -541,7 +545,13 @@ export default function AdminDashboard() {
                             </div>
                           </>
                         )}
-                        <div>وضعیت: <span className={hasSub ? 'text-success-400' : sub?.status === 'suspended' ? 'text-warning-400' : 'text-gray-500'}>{hasSub ? 'فعال' : sub?.status === 'suspended' ? 'قطع شده' : 'غیرفعال'}</span></div>
+                        {/* ✅ FIX: وضعیت بر اساس isActive و isSuspended */}
+                        <div>
+                          وضعیت:{' '}
+                          <span className={isActive ? 'text-success-400' : isSuspended ? 'text-warning-400' : 'text-gray-500'}>
+                            {isActive ? 'فعال' : isSuspended ? 'قطع شده' : 'غیرفعال'}
+                          </span>
+                        </div>
                       </div>
 
                       {sub?.id && (
@@ -553,7 +563,7 @@ export default function AdminDashboard() {
                           )}
 
                           <div className="flex gap-2 mt-4">
-                            {sub.status === 'active' && (
+                            {isActive && (
                               <button
                                 onClick={() => performUserAction(u.telegram_id, sub.id!, 'admin_suspend_sub', 'سرویس قطع شد')}
                                 disabled={!!actionLoading[u.telegram_id]}
@@ -562,7 +572,7 @@ export default function AdminDashboard() {
                                 {actionLoading[u.telegram_id] === 'admin_suspend_sub' ? 'در حال انجام...' : 'قطع سرویس'}
                               </button>
                             )}
-                            {sub.status === 'suspended' && (
+                            {isSuspended && (
                               <button
                                 onClick={() => performUserAction(u.telegram_id, sub.id!, 'admin_resume_sub', 'سرویس فعال شد')}
                                 disabled={!!actionLoading[u.telegram_id]}
