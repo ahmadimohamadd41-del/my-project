@@ -105,6 +105,11 @@ export default function AdminDashboard() {
   })
   const [saving, setSaving] = useState(false)
 
+  const [rejectOrder, setRejectOrder] = useState<Order | null>(null)
+  const [rejectReason, setRejectReason] = useState('')
+  const [rejectError, setRejectError] = useState('')
+  const [rejecting, setRejecting] = useState(false)
+
   const loadOrders = async () => {
     setLoading(true)
     setError('')
@@ -175,6 +180,41 @@ export default function AdminDashboard() {
       }
     } catch (e: any) {
       setError(e?.message || 'خطای شبکه')
+    }
+  }
+
+  const submitReject = async () => {
+    if (!rejectOrder) return
+    if (!rejectReason.trim()) {
+      setRejectError('دلیل رد را وارد کنید')
+      return
+    }
+    setRejecting(true)
+    setRejectError('')
+    try {
+      const res = await fetch(`${API}/?action=update_order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: rejectOrder.id,
+          status: 'failed',
+          reject_reason: rejectReason.trim(),
+          admin_telegram_id: resolvedId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setMessage(`سفارش #${rejectOrder.id} رد شد`)
+        setRejectOrder(null)
+        setRejectReason('')
+        await loadOrders()
+      } else {
+        setRejectError(data.error || 'خطا در بروزرسانی')
+      }
+    } catch (e: any) {
+      setRejectError(e?.message || 'خطای شبکه')
+    } finally {
+      setRejecting(false)
     }
   }
 
@@ -338,7 +378,7 @@ export default function AdminDashboard() {
                         تأیید
                       </button>
                       <button
-                        onClick={() => updateOrder(o.id, 'failed')}
+                        onClick={() => { setRejectOrder(o); setRejectReason(''); setRejectError('') }}
                         className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20"
                       >
                         رد
@@ -482,6 +522,48 @@ export default function AdminDashboard() {
             >
               {saving ? 'در حال ذخیره...' : 'ذخیره تنظیمات'}
             </button>
+          </div>
+        )}
+
+        {/* Reject Modal */}
+        {rejectOrder && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md">
+              <h3 className="text-lg font-bold text-white mb-1">رد سفارش #{rejectOrder.id}</h3>
+              <p className="text-sm text-gray-400 mb-4">لطفاً دلیل رد این سفارش را وارد کنید.</p>
+
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-error-500/40 focus:border-error-500/50 transition-all resize-none"
+                rows={3}
+                placeholder="مثال: رسید نامعتبر، مبلغ ناقص..."
+                autoFocus
+              />
+
+              {rejectError && (
+                <div className="mt-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                  {rejectError}
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-5">
+                <button
+                  onClick={() => { setRejectOrder(null); setRejectReason(''); setRejectError('') }}
+                  disabled={rejecting}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 hover:border-navy-600 transition-all duration-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={submitReject}
+                  disabled={rejecting}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
+                >
+                  {rejecting ? 'در حال رد...' : 'تأیید رد'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
