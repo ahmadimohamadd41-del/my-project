@@ -26,6 +26,22 @@ type PaymentSettings = {
   gateway_provider: string
 }
 
+type AdminUser = {
+  telegram_id: number
+  first_name?: string
+  last_name?: string
+  username?: string
+  subscription?: {
+    plan_name?: string
+    plan_code?: string
+    status?: string
+    quota_used_gb?: string | number
+    quota_limit_gb?: number
+    expiry_date?: string
+    radius_username?: string
+  } | null
+}
+
 const ADMIN_TG_ID = 8869320234
 const API = 'https://varminiapp.popserver.shop/api'
 
@@ -71,7 +87,10 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  const [tab, setTab] = useState<'orders' | 'settings'>('orders')
+  const [tab, setTab] = useState<'orders' | 'settings' | 'users'>('orders')
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [usersError, setUsersError] = useState('')
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
@@ -98,6 +117,21 @@ export default function AdminDashboard() {
       setError(e?.message || 'خطای شبکه')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadUsers = async () => {
+    setUsersLoading(true)
+    setUsersError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_users&admin_telegram_id=${resolvedId}`)
+      const data = await res.json()
+      if (data.ok) setUsers(data.users || [])
+      else setUsersError(data.error || 'خطا در دریافت لیست کاربران')
+    } catch (e: any) {
+      setUsersError(e?.message || 'خطای شبکه')
+    } finally {
+      setUsersLoading(false)
     }
   }
 
@@ -233,6 +267,12 @@ export default function AdminDashboard() {
           >
             تنظیمات پرداخت
           </button>
+          <button
+            onClick={() => { setTab('users'); if (users.length === 0) loadUsers() }}
+            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'users' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            کاربران
+          </button>
         </div>
 
         {message && (
@@ -306,6 +346,64 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === 'users' && (
+          <>
+            <button onClick={loadUsers} className="mb-5 px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300">
+              بروزرسانی لیست
+            </button>
+
+            {usersError && (
+              <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                {usersError}
+              </div>
+            )}
+
+            {usersLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="relative inline-flex">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary-500/20"></div>
+                  <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                </div>
+              </div>
+            ) : users.length === 0 ? (
+              <div className="glass-card rounded-2xl p-8 text-center text-gray-400">
+                کاربری یافت نشد.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {users.map((u) => {
+                  const sub = u.subscription
+                  const hasSub = sub && sub.status === 'active'
+                  return (
+                    <div key={u.telegram_id} className="glass-card glass-card-hover rounded-2xl p-4">
+                      <div className="flex justify-between gap-2 mb-3">
+                        <div className="font-bold text-white">
+                          {u.first_name || '—'} {u.last_name || ''}
+                          {u.username ? ` @${u.username}` : ''}
+                        </div>
+                        <div className="font-mono text-xs text-gray-400" dir="ltr">
+                          {u.telegram_id}
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-300 space-y-1.5">
+                        <div>اشتراک: <span className="text-white">{hasSub ? (sub?.plan_name || sub?.plan_code || 'فعال') : 'بدون اشتراک'}</span></div>
+                        {hasSub && (
+                          <>
+                            <div>حجم: <span className="font-mono text-white">{sub?.quota_used_gb ?? '0'} / {sub?.quota_limit_gb ?? '0'} GB</span></div>
+                            <div>انقضا: <span className="text-white">{sub?.expiry_date ? new Date(sub.expiry_date).toLocaleDateString('fa-IR') : '—'}</span></div>
+                            <div>یوزرنیم: <span className="font-mono text-white break-all">{sub?.radius_username || '—'}</span></div>
+                          </>
+                        )}
+                        <div>وضعیت: <span className={hasSub ? 'text-success-400' : 'text-gray-500'}>{hasSub ? 'فعال' : 'غیرفعال'}</span></div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </>
