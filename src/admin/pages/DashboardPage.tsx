@@ -56,6 +56,27 @@ type AdminPlan = {
   is_active: number
 }
 
+type Ticket = {
+  id: number
+  subject: string
+  status: 'open' | 'answered' | 'closed'
+  last_sender: 'user' | 'admin'
+  created_at: string
+  updated_at: string
+  telegram_id: number
+  first_name?: string
+  username?: string
+  message_count: number
+  last_message?: string
+}
+
+type TicketMessage = {
+  id: number
+  sender: 'user' | 'admin'
+  message: string
+  created_at: string
+}
+
 const ADMIN_TG_ID = 8869320234
 const API = 'https://varminiapp.popserver.shop/api'
 
@@ -101,7 +122,7 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  const [tab, setTab] = useState<'orders' | 'settings' | 'users' | 'plans'>('orders')
+  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'settings' | 'users'>('orders')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
@@ -156,6 +177,21 @@ export default function AdminDashboard() {
   const [deleteModalPlan, setDeleteModalPlan] = useState<AdminPlan | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+
+  // ─── Tickets state ───
+  const [tickets, setTickets] = useState<Ticket[]>([])
+  const [ticketsLoading, setTicketsLoading] = useState(false)
+  const [ticketsError, setTicketsError] = useState('')
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+  const [ticketMessages, setTicketMessages] = useState<TicketMessage[]>([])
+  const [ticketMessagesLoading, setTicketMessagesLoading] = useState(false)
+  const [ticketReply, setTicketReply] = useState('')
+  const [ticketReplyLoading, setTicketReplyLoading] = useState(false)
+  const [ticketReplyError, setTicketReplyError] = useState('')
+  const [ticketActionLoading, setTicketActionLoading] = useState<Record<number, boolean>>({})
+  const [ticketActionMessage, setTicketActionMessage] = useState('')
+
+  const needsReplyCount = tickets.filter((t) => t.status === 'open' && t.last_sender === 'user').length
 
   const performUserAction = async (
     tgId: number,
@@ -355,6 +391,103 @@ export default function AdminDashboard() {
     }
   }
 
+  const loadTickets = async () => {
+    setTicketsLoading(true)
+    setTicketsError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_tickets&admin_telegram_id=${resolvedId}`)
+      const data = await res.json()
+      if (data.ok) setTickets(data.tickets || [])
+      else setTicketsError(data.error || 'خطا در دریافت تیکت‌ها')
+    } catch (e: any) {
+      setTicketsError(e?.message || 'خطای شبکه')
+    } finally {
+      setTicketsLoading(false)
+    }
+  }
+
+  const openTicket = async (ticket: Ticket) => {
+    setSelectedTicket(ticket)
+    setTicketReply('')
+    setTicketReplyError('')
+    setTicketMessagesLoading(true)
+    setTicketMessages([])
+    try {
+      const res = await fetch(`${API}/?action=ticket_detail&telegram_id=${ticket.telegram_id}&ticket_id=${ticket.id}`)
+      const data = await res.json()
+      if (data.ok && data.messages) {
+        setTicketMessages(data.messages)
+      } else {
+        setTicketReplyError(data.error || 'خطا در دریافت پیام‌ها')
+      }
+    } catch (e: any) {
+      setTicketReplyError(e?.message || 'خطای شبکه')
+    } finally {
+      setTicketMessagesLoading(false)
+    }
+  }
+
+  const submitTicketReply = async () => {
+    if (!selectedTicket) return
+    if (!ticketReply.trim()) {
+      setTicketReplyError('پیام خالی است')
+      return
+    }
+    setTicketReplyLoading(true)
+    setTicketReplyError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_reply_ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          ticket_id: selectedTicket.id,
+          message: ticketReply.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setTicketReply('')
+        await openTicket(selectedTicket)
+        await loadTickets()
+      } else {
+        setTicketReplyError(data.error || 'خطا در ارسال پاسخ')
+      }
+    } catch (e: any) {
+      setTicketReplyError(e?.message || 'خطای شبکه')
+    } finally {
+      setTicketReplyLoading(false)
+    }
+  }
+
+  const closeTicket = async (ticketId: number) => {
+    setTicketActionLoading((prev) => ({ ...prev, [ticketId]: true }))
+    setTicketActionMessage('')
+    try {
+      const res = await fetch(`${API}/?action=admin_close_ticket`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          ticket_id: ticketId,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setTicketActionMessage('تیکت بسته شد')
+        setSelectedTicket(null)
+        await loadTickets()
+        setTimeout(() => setTicketActionMessage(''), 3000)
+      } else {
+        setTicketActionMessage(data.error || 'خطا در بستن تیکت')
+      }
+    } catch (e: any) {
+      setTicketActionMessage(e?.message || 'خطای شبکه')
+    } finally {
+      setTicketActionLoading((prev) => ({ ...prev, [ticketId]: false }))
+    }
+  }
+
   const loadSettings = async () => {
     try {
       const res = await fetch(`${API}/?action=payment_settings`)
@@ -521,6 +654,17 @@ export default function AdminDashboard() {
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'plans' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             پلن‌ها
+          </button>
+          <button
+            onClick={() => { setTab('tickets'); if (tickets.length === 0) loadTickets() }}
+            className={`relative px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'tickets' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            تیکت‌ها
+            {needsReplyCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-error-500 text-white text-xs font-bold border-2 border-navy-900">
+                {needsReplyCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => setTab('settings')}
@@ -746,6 +890,80 @@ export default function AdminDashboard() {
                       >
                         {isLoading ? 'در حال ذخیره...' : hasChange ? 'ذخیره تغییرات' : 'تغییری وجود ندارد'}
                       </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ─── Tickets Tab ─── */}
+        {tab === 'tickets' && (
+          <>
+            <button onClick={loadTickets} className="mb-5 px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300">
+              بروزرسانی لیست
+            </button>
+
+            {ticketActionMessage && (
+              <div className="mb-4 p-3.5 rounded-xl bg-success-500/10 border border-success-500/30 text-success-300 text-sm">
+                {ticketActionMessage}
+              </div>
+            )}
+
+            {ticketsError && (
+              <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                {ticketsError}
+              </div>
+            )}
+
+            {ticketsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="relative inline-flex">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary-500/20"></div>
+                  <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                </div>
+              </div>
+            ) : tickets.length === 0 ? (
+              <div className="glass-card rounded-2xl p-8 text-center text-gray-400">
+                تیکتی وجود ندارد.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {tickets.map((t) => {
+                  const needsReply = t.status === 'open' && t.last_sender === 'user'
+                  const isAnswered = t.status === 'answered'
+                  const isClosed = t.status === 'closed'
+                  return (
+                    <div
+                      key={t.id}
+                      onClick={() => openTicket(t)}
+                      className="glass-card glass-card-hover rounded-2xl p-4 cursor-pointer"
+                    >
+                      <div className="flex justify-between gap-2 mb-2">
+                        <div className="font-bold text-white text-sm">{t.subject}</div>
+                        {needsReply ? (
+                          <span className="text-xs px-2.5 py-0.5 rounded-lg bg-error-500/10 border border-error-500/20 text-error-400 whitespace-nowrap">نیاز به پاسخ</span>
+                        ) : isAnswered ? (
+                          <span className="text-xs px-2.5 py-0.5 rounded-lg bg-success-500/10 border border-success-500/20 text-success-400 whitespace-nowrap">پاسخ داده شده</span>
+                        ) : (
+                          <span className="text-xs px-2.5 py-0.5 rounded-lg bg-navy-800/60 border border-navy-700/40 text-gray-500 whitespace-nowrap">بسته شده</span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-300 space-y-1">
+                        <div className="text-gray-400">
+                          {t.first_name || '—'} {t.username ? `@${t.username}` : ''}{' '}
+                          {t.telegram_id ? `(${t.telegram_id})` : ''}
+                        </div>
+                        <div className="text-gray-500 text-xs">
+                          {t.message_count} پیام · {new Date(t.updated_at).toLocaleString('fa-IR')}
+                        </div>
+                        {t.last_message && (
+                          <div className="text-gray-400 text-xs mt-1 line-clamp-2">
+                            {t.last_message.length > 100 ? t.last_message.slice(0, 100) + '...' : t.last_message}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
@@ -1196,6 +1414,102 @@ export default function AdminDashboard() {
             </div>
           )
         })()}
+
+        {/* Ticket Detail Modal */}
+        {selectedTicket && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md max-h-[85vh] flex flex-col">
+              <div className="flex justify-between items-start gap-2 mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white">{selectedTicket.subject}</h3>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {selectedTicket.first_name || '—'} {selectedTicket.username ? `@${selectedTicket.username}` : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedTicket(null)}
+                  className="text-gray-400 hover:text-gray-200 transition flex-shrink-0"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Messages */}
+              <div className="flex-1 overflow-y-auto space-y-2 mb-4 pr-1" style={{ maxHeight: '300px' }}>
+                {ticketMessagesLoading ? (
+                  <div className="flex justify-center py-6">
+                    <div className="relative inline-flex">
+                      <div className="w-8 h-8 rounded-full border-2 border-primary-500/20"></div>
+                      <div className="absolute inset-0 w-8 h-8 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                    </div>
+                  </div>
+                ) : ticketMessages.length === 0 ? (
+                  <p className="text-center text-gray-500 text-sm py-4">پیامی وجود ندارد</p>
+                ) : (
+                  ticketMessages.map((m) => (
+                    <div
+                      key={m.id}
+                      className={`flex ${m.sender === 'user' ? 'justify-start' : 'justify-end'}`}
+                    >
+                      <div
+                        className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm ${
+                          m.sender === 'user'
+                            ? 'bg-blue-500/15 border border-blue-500/20 text-blue-100 rounded-bl-md'
+                            : 'bg-success-500/15 border border-success-500/20 text-success-100 rounded-br-md'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap break-words">{m.message}</p>
+                        <p className="text-xs text-gray-500 mt-1">{new Date(m.created_at).toLocaleString('fa-IR')}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Reply */}
+              {selectedTicket.status !== 'closed' && (
+                <>
+                  {ticketReplyError && (
+                    <div className="mb-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                      {ticketReplyError}
+                    </div>
+                  )}
+
+                  <textarea
+                    value={ticketReply}
+                    onChange={(e) => setTicketReply(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all resize-none"
+                    rows={3}
+                    placeholder="پاسخ به تیکت..."
+                  />
+
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => closeTicket(selectedTicket.id)}
+                      disabled={!!ticketActionLoading[selectedTicket.id] || ticketReplyLoading}
+                      className="px-4 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 hover:border-navy-600 transition-all duration-300 disabled:opacity-50"
+                    >
+                      {ticketActionLoading[selectedTicket.id] ? 'در حال...' : 'بستن تیکت'}
+                    </button>
+                    <button
+                      onClick={submitTicketReply}
+                      disabled={ticketReplyLoading}
+                      className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-sm font-semibold hover:from-primary-400 hover:to-primary-500 transition-all duration-300 glow-primary disabled:opacity-50"
+                    >
+                      {ticketReplyLoading ? 'در حال ارسال...' : 'ارسال پاسخ'}
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {selectedTicket.status === 'closed' && (
+                <p className="text-center text-gray-500 text-sm py-2">این تیکت بسته شده است.</p>
+              )}
+            </div>
+          </div>
+        )}
 
         <Link to="/" className="block text-center mt-8 text-sm text-primary-400 hover:text-primary-300 transition">
           بازگشت به خانه
