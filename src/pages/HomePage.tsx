@@ -255,20 +255,26 @@ export default function HomePage() {
                       </span>
                     </div>
 
-                    {subscriptionData?.config_url && !subscriptionData.config_url.includes('/config/') ? (
+                    <div className="grid grid-cols-2 gap-2 mt-3">
                       <a
-                        href={subscriptionData.config_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block text-center mt-3 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500 transition-all duration-300 text-white text-sm font-semibold glow-primary"
+                        href={`https://varminiapp.popserver.shop/api/?action=download_config&telegram_id=${user?.telegram_id}&proto=tcp`}
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-400 hover:to-blue-500 transition-all duration-300 shadow-lg shadow-blue-500/20"
                       >
-                        دریافت کانفیگ
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        دانلود TCP
                       </a>
-                    ) : (
-                      <p className="text-center mt-3 text-xs text-gray-500">
-                        کانفیگ به‌زودی
-                      </p>
-                    )}
+                      <a
+                        href={`https://varminiapp.popserver.shop/api/?action=download_config&telegram_id=${user?.telegram_id}&proto=udp`}
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-semibold hover:from-green-400 hover:to-green-500 transition-all duration-300 shadow-lg shadow-green-500/20"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        دانلود UDP
+                      </a>
+                    </div>
                   </div>
                 </div>
               ) : (
