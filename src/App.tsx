@@ -8,6 +8,7 @@ import PlansPage from '@/pages/PlansPage'
 import AccountPage from '@/pages/AccountPage'
 import AdminDashboard from '@/admin/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
+import SupportPage from '@/pages/SupportPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 import LoadingSpinner from '@/components/LoadingSpinner'
@@ -35,6 +36,7 @@ function AppRoutes() {
         }
       />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/support" element={<SupportPage />} />
       {/* قفل ادمین داخل DashboardPage است (تلگرام + telegram_id) */}
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="*" element={<NotFoundPage />} />
