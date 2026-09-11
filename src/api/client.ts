@@ -3,7 +3,7 @@ import { vpsApi, cpanelApi } from '@/lib/api'
 // Alignment with VPS PostgreSQL Schema types
 export interface VPSPlan {
   id: string
-  plan_code: string   // ← اصلاح شد (قبلاً str بود)
+  plan_code: string
   display_name: string
   quota_bytes: number
   duration_seconds: number
@@ -39,14 +39,33 @@ export interface VPSCustomerAccount {
   }>
 }
 
-// 1. VPS API Calls (Health, Plans, Subscription, Customer Usage)
+// 1. VPS API Calls (Health, Customer, Usage)
+// Note: plans now come from cPanel (see plansApi below)
+
 export const plansApi = {
+  /**
+   * ✅ FIX: Plans now come from cPanel (not VPS)
+   * تا وقتی ادمین قیمت یا وضعیت پلن را تغییر می‌دهد، فروشگاه فوری آپدیت شود
+   */
   getAll: async (): Promise<VPSPlan[]> => {
     try {
-      const response = await vpsApi.get<VPSPlan[]>('/v1/plans')
-      return response.data || []
+      // cache-busting با timestamp
+      const response = await cpanelApi.get(`?action=plans&_=${Date.now()}`)
+      const cpanelPlans = response.data?.plans || []
+
+      // Map cPanel format → VPSPlan
+      return cpanelPlans.map((p: any) => ({
+        id: String(p.id),
+        plan_code: p.plan_code,
+        display_name: p.name,
+        quota_bytes: (Number(p.quota_gb) || 0) * 1024 * 1024 * 1024,
+        duration_seconds: (Number(p.duration_days) || 30) * 86400,
+        price_amount: Number(p.price_amount) || 0,
+        price_currency: p.price_currency || 'IRR',
+        plan_status: Number(p.is_active) === 1 ? 'active' : 'inactive',
+      }))
     } catch (err) {
-      console.error('Failed to fetch plans from VPS API:', err)
+      console.error('Failed to fetch plans from cPanel:', err)
       return []
     }
   },

@@ -44,6 +44,18 @@ type AdminUser = {
   } | null
 }
 
+type AdminPlan = {
+  id: string
+  plan_code: string
+  name: string
+  name_en?: string
+  quota_gb: number
+  duration_days: number
+  price_amount: string | number
+  price_currency: string
+  is_active: number
+}
+
 const ADMIN_TG_ID = 8869320234
 const API = 'https://varminiapp.popserver.shop/api'
 
@@ -89,7 +101,7 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  const [tab, setTab] = useState<'orders' | 'settings' | 'users'>('orders')
+  const [tab, setTab] = useState<'orders' | 'settings' | 'users' | 'plans'>('orders')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
@@ -118,6 +130,32 @@ export default function AdminDashboard() {
   const [actionLoading, setActionLoading] = useState<Record<number, string | null>>({})
   const [confirmDeleteUserId, setConfirmDeleteUserId] = useState<number | null>(null)
   const [userActionMessage, setUserActionMessage] = useState<Record<number, { type: 'ok' | 'error'; text: string } | null>>({})
+
+  // ─── Plans state ───
+  const [plans, setPlans] = useState<AdminPlan[]>([])
+  const [plansLoading, setPlansLoading] = useState(false)
+  const [plansError, setPlansError] = useState('')
+  const [editingPlan, setEditingPlan] = useState<Record<string, { price?: number | string; is_active?: boolean }>>({})
+  const [planActionLoading, setPlanActionLoading] = useState<Record<string, boolean>>({})
+  const [planMessage, setPlanMessage] = useState<Record<string, { type: 'ok' | 'error'; text: string } | null>>({})
+
+  // ─── Create Plan state ───
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createForm, setCreateForm] = useState({
+    plan_code: '',
+    name: '',
+    name_en: '',
+    quota_gb: 20,
+    duration_days: 30,
+    price_amount: 50000,
+  })
+  const [createLoading, setCreateLoading] = useState(false)
+  const [createError, setCreateError] = useState('')
+
+  // ─── Delete Plan state ───
+  const [deleteModalPlan, setDeleteModalPlan] = useState<AdminPlan | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const performUserAction = async (
     tgId: number,
@@ -196,6 +234,124 @@ export default function AdminDashboard() {
       setUsersError(e?.message || 'خطای شبکه')
     } finally {
       setUsersLoading(false)
+    }
+  }
+
+  const loadPlans = async () => {
+    setPlansLoading(true)
+    setPlansError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_plans&admin_telegram_id=${resolvedId}`)
+      const data = await res.json()
+      if (data.ok) setPlans(data.plans || [])
+      else setPlansError(data.error || 'خطا در دریافت پلن‌ها')
+    } catch (e: any) {
+      setPlansError(e?.message || 'خطای شبکه')
+    } finally {
+      setPlansLoading(false)
+    }
+  }
+
+  const updatePlan = async (
+    planId: string,
+    changes: { price_amount?: number | string; is_active?: number }
+  ) => {
+    setPlanActionLoading((prev) => ({ ...prev, [planId]: true }))
+    setPlanMessage((prev) => ({ ...prev, [planId]: null }))
+    try {
+      const res = await fetch(`${API}/?action=admin_update_plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          plan_id: planId,
+          ...changes,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setPlanMessage((prev) => ({ ...prev, [planId]: { type: 'ok', text: 'ذخیره شد' } }))
+        setEditingPlan((prev) => {
+          const next = { ...prev }
+          delete next[planId]
+          return next
+        })
+        await loadPlans()
+        setTimeout(() => {
+          setPlanMessage((prev) => ({ ...prev, [planId]: null }))
+        }, 2500)
+      } else {
+        setPlanMessage((prev) => ({ ...prev, [planId]: { type: 'error', text: data.error || 'خطا در ذخیره' } }))
+      }
+    } catch (e: any) {
+      setPlanMessage((prev) => ({ ...prev, [planId]: { type: 'error', text: e?.message || 'خطای شبکه' } }))
+    } finally {
+      setPlanActionLoading((prev) => ({ ...prev, [planId]: false }))
+    }
+  }
+
+  const createPlan = async () => {
+    setCreateLoading(true)
+    setCreateError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_create_plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          ...createForm,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setShowCreateModal(false)
+        setCreateForm({
+          plan_code: '',
+          name: '',
+          name_en: '',
+          quota_gb: 20,
+          duration_days: 30,
+          price_amount: 50000,
+        })
+        setMessage('پلن جدید با موفقیت اضافه شد')
+        await loadPlans()
+        setTimeout(() => setMessage(''), 3000)
+      } else {
+        setCreateError(data.error || 'خطا در افزودن پلن')
+      }
+    } catch (e: any) {
+      setCreateError(e?.message || 'خطای شبکه')
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
+  const deletePlan = async () => {
+    if (!deleteModalPlan) return
+    setDeleteLoading(true)
+    setDeleteError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_delete_plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          plan_id: deleteModalPlan.id,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setDeleteModalPlan(null)
+        setMessage('پلن حذف شد')
+        await loadPlans()
+        setTimeout(() => setMessage(''), 3000)
+      } else {
+        setDeleteError(data.error || 'خطا در حذف پلن')
+      }
+    } catch (e: any) {
+      setDeleteError(e?.message || 'خطای شبکه')
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -350,25 +506,31 @@ export default function AdminDashboard() {
     <div className="min-h-screen app-bg p-4">
       <div className="max-w-2xl mx-auto animate-fade-in">
         <h1 className="text-xl font-bold text-white mb-1">پنل ادمین</h1>
-        <p className="text-sm text-gray-400 mb-6">مدیریت سفارش‌ها و تنظیمات پرداخت</p>
+        <p className="text-sm text-gray-400 mb-6">مدیریت سفارش‌ها، پلن‌ها و کاربران</p>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-5 p-1 rounded-xl bg-navy-900/60 border border-navy-700/40 w-fit">
+        <div className="flex gap-2 mb-5 p-1 rounded-xl bg-navy-900/60 border border-navy-700/40 w-fit flex-wrap">
           <button
             onClick={() => setTab('orders')}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'orders' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'orders' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             سفارش‌ها
           </button>
           <button
-            onClick={() => setTab('settings')}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'settings' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+            onClick={() => { setTab('plans'); if (plans.length === 0) loadPlans() }}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'plans' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
-            تنظیمات پرداخت
+            پلن‌ها
+          </button>
+          <button
+            onClick={() => setTab('settings')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'settings' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            تنظیمات
           </button>
           <button
             onClick={() => { setTab('users'); if (users.length === 0) loadUsers() }}
-            className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'users' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'users' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             کاربران
           </button>
@@ -406,9 +568,6 @@ export default function AdminDashboard() {
               </div>
             ) : orders.length === 0 ? (
               <div className="glass-card rounded-2xl p-8 text-center text-gray-400">
-                <svg className="w-12 h-12 mx-auto mb-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
                 سفارش pending وجود ندارد.
               </div>
             ) : (
@@ -450,6 +609,151 @@ export default function AdminDashboard() {
           </>
         )}
 
+        {/* ─── Plans Tab ─── */}
+        {tab === 'plans' && (
+          <>
+            <div className="flex gap-2 mb-5">
+              <button onClick={loadPlans} className="px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300">
+                بروزرسانی
+              </button>
+              <button
+                onClick={() => { setShowCreateModal(true); setCreateError('') }}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-success-500 to-success-600 text-sm font-semibold hover:from-success-400 hover:to-success-500 transition-all duration-300 shadow-lg shadow-success-500/20"
+              >
+                + افزودن پلن جدید
+              </button>
+            </div>
+
+            {plansError && (
+              <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                {plansError}
+              </div>
+            )}
+
+            {plansLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="relative inline-flex">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary-500/20"></div>
+                  <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                </div>
+              </div>
+            ) : plans.length === 0 ? (
+              <div className="glass-card rounded-2xl p-8 text-center text-gray-400">
+                پلنی یافت نشد.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {plans.map((p) => {
+                  const isActive = p.is_active === 1
+                  const edit = editingPlan[p.id] || {}
+                  const currentPrice = Number(p.price_amount) || 0
+                  const editPrice = edit.price !== undefined ? Number(edit.price) : currentPrice
+                  const editActive = edit.is_active !== undefined ? edit.is_active : isActive
+                  const hasChange = editPrice !== currentPrice || editActive !== isActive
+                  const isLoading = !!planActionLoading[p.id]
+                  const msg = planMessage[p.id]
+
+                  return (
+                    <div key={p.id} className={`glass-card glass-card-hover rounded-2xl p-4 ${!isActive ? 'opacity-60' : ''}`}>
+                      <div className="flex justify-between gap-2 mb-3">
+                        <div className="font-bold text-white">{p.name}</div>
+                        <div className="flex items-center gap-2">
+                          <div className={`text-xs px-2.5 py-0.5 rounded-lg border ${isActive ? 'text-success-400 bg-success-500/10 border-success-500/20' : 'text-gray-500 bg-navy-800/60 border-navy-700/40'}`}>
+                            {isActive ? 'فعال' : 'غیرفعال'}
+                          </div>
+                          <button
+                            onClick={() => { setDeleteModalPlan(p); setDeleteError('') }}
+                            className="text-xs px-2.5 py-1 rounded-lg bg-error-500/15 text-error-300 hover:bg-error-500/25 transition-all duration-200 border border-error-500/20"
+                          >
+                            حذف
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="text-sm text-gray-300 space-y-1.5 mb-4">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">کد پلن</span>
+                          <span className="font-mono text-white" dir="ltr">{p.plan_code}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">حجم</span>
+                          <span className="text-white">{p.quota_gb} گیگابایت</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">مدت</span>
+                          <span className="text-white">{p.duration_days} روز</span>
+                        </div>
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="block text-xs text-gray-400 mb-1.5">قیمت (تومان)</label>
+                        <input
+                          type="number"
+                          value={edit.price !== undefined ? edit.price : currentPrice}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setEditingPlan((prev) => ({
+                              ...prev,
+                              [p.id]: { ...prev[p.id], price: val === '' ? '' : Number(val) },
+                            }))
+                          }}
+                          className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all font-mono"
+                          dir="ltr"
+                          min={0}
+                          step={1000}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          فعلی: {currentPrice.toLocaleString('fa-IR')} تومان
+                        </p>
+                      </div>
+
+                      <label className="flex items-center gap-3 text-sm cursor-pointer mb-4">
+                        <input
+                          type="checkbox"
+                          checked={editActive}
+                          onChange={(e) => {
+                            setEditingPlan((prev) => ({
+                              ...prev,
+                              [p.id]: { ...prev[p.id], is_active: e.target.checked },
+                            }))
+                          }}
+                          className="w-4 h-4 rounded accent-primary-500"
+                        />
+                        نمایش به کاربران (فعال)
+                      </label>
+
+                      {msg && (
+                        <div className={`mb-3 p-2.5 rounded-xl text-xs ${msg.type === 'ok' ? 'bg-success-500/10 border border-success-500/30 text-success-300' : 'bg-error-500/10 border border-error-500/30 text-error-300'}`}>
+                          {msg.text}
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          const changes: { price_amount?: number; is_active?: number } = {}
+                          if (editPrice !== currentPrice) changes.price_amount = editPrice
+                          if (editActive !== isActive) changes.is_active = editActive ? 1 : 0
+                          if (Object.keys(changes).length > 0) {
+                            updatePlan(p.id, changes)
+                          }
+                        }}
+                        disabled={!hasChange || isLoading}
+                        className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                          hasChange && !isLoading
+                            ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white hover:from-primary-400 hover:to-primary-500 glow-primary'
+                            : 'bg-navy-800/60 text-gray-500 border border-navy-700/40 cursor-not-allowed'
+                        }`}
+                      >
+                        {isLoading ? 'در حال ذخیره...' : hasChange ? 'ذخیره تغییرات' : 'تغییری وجود ندارد'}
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+
         {tab === 'users' && (
           <>
             <button onClick={loadUsers} className="mb-5 px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300">
@@ -477,9 +781,7 @@ export default function AdminDashboard() {
               <div className="space-y-3">
                 {users.map((u) => {
                   const sub = u.subscription
-                  // ✅ FIX: شامل suspended هم بشه
                   const hasSub = sub && (sub.status === 'active' || sub.status === 'suspended')
-                  // ✅ FIX: وضعیت واقعی کاربر
                   const isActive = sub && sub.status === 'active'
                   const isSuspended = sub && sub.status === 'suspended'
                   return (
@@ -545,7 +847,6 @@ export default function AdminDashboard() {
                             </div>
                           </>
                         )}
-                        {/* ✅ FIX: وضعیت بر اساس isActive و isSuspended */}
                         <div>
                           وضعیت:{' '}
                           <span className={isActive ? 'text-success-400' : isSuspended ? 'text-warning-400' : 'text-gray-500'}>
@@ -711,6 +1012,148 @@ export default function AdminDashboard() {
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
                 >
                   {rejecting ? 'در حال رد...' : 'تأیید رد'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Create Plan Modal */}
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md">
+              <h3 className="text-lg font-bold text-white mb-4">افزودن پلن جدید</h3>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">کد پلن *</label>
+                  <input
+                    value={createForm.plan_code}
+                    onChange={(e) => setCreateForm({ ...createForm, plan_code: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 font-mono"
+                    placeholder="40GB_30D"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">نام (فارسی) *</label>
+                  <input
+                    value={createForm.name}
+                    onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                    placeholder="پلن ۴۰ گیگابایت"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">نام انگلیسی (اختیاری)</label>
+                  <input
+                    value={createForm.name_en}
+                    onChange={(e) => setCreateForm({ ...createForm, name_en: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 font-mono"
+                    placeholder="40GB Plan"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">حجم (GB) *</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="2.5"
+                      max="400"
+                      value={createForm.quota_gb}
+                      onChange={(e) => setCreateForm({ ...createForm, quota_gb: Number(e.target.value) })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">مدت (روز) *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={createForm.duration_days}
+                      onChange={(e) => setCreateForm({ ...createForm, duration_days: Number(e.target.value) })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 font-mono"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">قیمت (تومان) *</label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1000"
+                    value={createForm.price_amount}
+                    onChange={(e) => setCreateForm({ ...createForm, price_amount: Number(e.target.value) })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 font-mono"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              {createError && (
+                <div className="mt-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                  {createError}
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-5">
+                <button
+                  onClick={() => { setShowCreateModal(false); setCreateError('') }}
+                  disabled={createLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 hover:border-navy-600 transition-all duration-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={createPlan}
+                  disabled={createLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-success-500 to-success-600 text-sm font-semibold hover:from-success-400 hover:to-success-500 transition-all duration-300 shadow-lg shadow-success-500/20 disabled:opacity-50"
+                >
+                  {createLoading ? 'در حال افزودن...' : 'افزودن پلن'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Plan Confirm Modal */}
+        {deleteModalPlan && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md">
+              <h3 className="text-lg font-bold text-white mb-2">حذف پلن</h3>
+              <p className="text-sm text-gray-400 mb-5">
+                آیا مطمئنید می‌خواهید پلن «{deleteModalPlan.name}» ({deleteModalPlan.plan_code}) را حذف کنید؟
+                این عمل برگشت‌پذیر نیست.
+              </p>
+
+              {deleteError && (
+                <div className="mb-4 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                  {deleteError}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setDeleteModalPlan(null); setDeleteError('') }}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 hover:border-navy-600 transition-all duration-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={deletePlan}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
+                >
+                  {deleteLoading ? 'در حال حذف...' : 'بله، حذف کن'}
                 </button>
               </div>
             </div>
