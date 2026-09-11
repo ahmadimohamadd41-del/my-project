@@ -77,6 +77,14 @@ type TicketMessage = {
   created_at: string
 }
 
+type Template = {
+  template_key: string
+  title: string
+  template_text: string
+  description?: string
+  updated_at: string
+}
+
 const ADMIN_TG_ID = 8869320234
 const API = 'https://varminiapp.popserver.shop/api'
 
@@ -122,7 +130,7 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'settings' | 'users'>('orders')
+  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'settings' | 'users'>('orders')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
@@ -192,6 +200,16 @@ export default function AdminDashboard() {
   const [ticketActionMessage, setTicketActionMessage] = useState('')
 
   const needsReplyCount = tickets.filter((t) => t.status === 'open' && t.last_sender === 'user').length
+
+  // ─── Templates state ───
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [templatesError, setTemplatesError] = useState('')
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null)
+  const [templateEditText, setTemplateEditText] = useState('')
+  const [templateSaving, setTemplateSaving] = useState(false)
+  const [templateSaveError, setTemplateSaveError] = useState('')
+  const [templateMessage, setTemplateMessage] = useState('')
 
   const performUserAction = async (
     tgId: number,
@@ -488,6 +506,51 @@ export default function AdminDashboard() {
     }
   }
 
+  const loadTemplates = async () => {
+    setTemplatesLoading(true)
+    setTemplatesError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_templates&admin_telegram_id=${resolvedId}`)
+      const data = await res.json()
+      if (data.ok) setTemplates(data.templates || [])
+      else setTemplatesError(data.error || 'خطا در دریافت پیام‌ها')
+    } catch (e: any) {
+      setTemplatesError(e?.message || 'خطای شبکه')
+    } finally {
+      setTemplatesLoading(false)
+    }
+  }
+
+  const saveTemplate = async () => {
+    if (!editingTemplate) return
+    setTemplateSaving(true)
+    setTemplateSaveError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_update_template`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          template_key: editingTemplate.template_key,
+          template_text: templateEditText,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setTemplateMessage('پیام ذخیره شد')
+        setEditingTemplate(null)
+        await loadTemplates()
+        setTimeout(() => setTemplateMessage(''), 3000)
+      } else {
+        setTemplateSaveError(data.error || 'خطا در ذخیره')
+      }
+    } catch (e: any) {
+      setTemplateSaveError(e?.message || 'خطای شبکه')
+    } finally {
+      setTemplateSaving(false)
+    }
+  }
+
   const loadSettings = async () => {
     try {
       const res = await fetch(`${API}/?action=payment_settings`)
@@ -665,6 +728,12 @@ export default function AdminDashboard() {
                 {needsReplyCount}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => { setTab('templates'); if (templates.length === 0) loadTemplates() }}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'templates' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            پیام‌ها
           </button>
           <button
             onClick={() => setTab('settings')}
@@ -967,6 +1036,66 @@ export default function AdminDashboard() {
                     </div>
                   )
                 })}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ─── Templates Tab ─── */}
+        {tab === 'templates' && (
+          <>
+            <button onClick={loadTemplates} className="mb-5 px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300">
+              بروزرسانی لیست
+            </button>
+
+            {templateMessage && (
+              <div className="mb-4 p-3.5 rounded-xl bg-success-500/10 border border-success-500/30 text-success-300 text-sm flex items-center gap-2">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                {templateMessage}
+              </div>
+            )}
+
+            {templatesError && (
+              <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                {templatesError}
+              </div>
+            )}
+
+            {templatesLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="relative inline-flex">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary-500/20"></div>
+                  <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                </div>
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="glass-card rounded-2xl p-8 text-center text-gray-400">
+                پیامی یافت نشد.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {templates.map((tpl) => (
+                  <div key={tpl.template_key} className="glass-card glass-card-hover rounded-2xl p-4">
+                    <div className="flex justify-between gap-2 mb-2">
+                      <div className="font-bold text-white">{tpl.title}</div>
+                      <button
+                        onClick={() => { setEditingTemplate(tpl); setTemplateEditText(tpl.template_text); setTemplateSaveError('') }}
+                        className="text-xs px-2.5 py-1 rounded-lg bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20"
+                      >
+                        ویرایش
+                      </button>
+                    </div>
+                    {tpl.description && (
+                      <p className="text-xs text-gray-400 mb-2">{tpl.description}</p>
+                    )}
+                    <p className="text-sm text-gray-300 line-clamp-2 mb-2">
+                      {tpl.template_text.length > 100 ? tpl.template_text.slice(0, 100) + '...' : tpl.template_text}
+                    </p>
+                    <p className="text-xs text-gray-500">آخرین ویرایش: {new Date(tpl.updated_at).toLocaleString('fa-IR')}</p>
+                  </div>
+                ))}
               </div>
             )}
           </>
@@ -1507,6 +1636,85 @@ export default function AdminDashboard() {
               {selectedTicket.status === 'closed' && (
                 <p className="text-center text-gray-500 text-sm py-2">این تیکت بسته شده است.</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Template Edit Modal */}
+        {editingTemplate && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md max-h-[85vh] flex flex-col">
+              <div className="flex justify-between items-start gap-2 mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white">{editingTemplate.title}</h3>
+                  <p className="text-xs text-gray-400 mt-1 font-mono" dir="ltr">{editingTemplate.template_key}</p>
+                </div>
+                <button
+                  onClick={() => setEditingTemplate(null)}
+                  className="text-gray-400 hover:text-gray-200 transition flex-shrink-0"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Placeholder help */}
+              <div className="mb-3 p-3 rounded-xl bg-navy-900/60 border border-navy-700/30">
+                <p className="text-xs text-gray-400 mb-2">متغیرهای قابل استفاده:</p>
+                <div className="grid grid-cols-2 gap-1 text-xs text-gray-500">
+                  <span dir="ltr">{'{order_id}'} — شماره سفارش</span>
+                  <span dir="ltr">{'{plan_name}'} — نام پلن</span>
+                  <span dir="ltr">{'{amount}'} — مبلغ</span>
+                  <span dir="ltr">{'{telegram_id}'} — آیدی تلگرام</span>
+                  <span dir="ltr">{'{first_name}'} — نام کاربر</span>
+                  <span dir="ltr">{'{username}'} — یوزرنیم تلگرام</span>
+                  <span dir="ltr">{'{user_display}'} — «telegram_id / first_name»</span>
+                  <span dir="ltr">{'{receipt}'} — کد پیگیری</span>
+                  <span dir="ltr">{'{radius_user}'} — یوزرنیم سرویس</span>
+                  <span dir="ltr">{'{password}'} — پسورد</span>
+                  <span dir="ltr">{'{expiry}'} — تاریخ انقضا</span>
+                  <span dir="ltr">{'{usage}'} — مصرف</span>
+                  <span dir="ltr">{'{quota}'} — حجم کل</span>
+                  <span dir="ltr">{'{days_left}'} — روزهای مانده</span>
+                  <span dir="ltr">{'{reject_reason}'} — دلیل رد</span>
+                  <span dir="ltr">{'{ticket_id}'} — شماره تیکت</span>
+                  <span dir="ltr">{'{subject}'} — موضوع</span>
+                  <span dir="ltr">{'{message}'} — متن پیام</span>
+                </div>
+              </div>
+
+              <textarea
+                value={templateEditText}
+                onChange={(e) => setTemplateEditText(e.target.value)}
+                disabled={templateSaving}
+                className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all resize-none disabled:opacity-50"
+                style={{ minHeight: '300px' }}
+                placeholder="متن پیام..."
+              />
+
+              {templateSaveError && (
+                <div className="mt-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                  {templateSaveError}
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={() => { setEditingTemplate(null); setTemplateSaveError('') }}
+                  disabled={templateSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 hover:border-navy-600 transition-all duration-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={saveTemplate}
+                  disabled={templateSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-sm font-semibold hover:from-primary-400 hover:to-primary-500 transition-all duration-300 glow-primary disabled:opacity-50"
+                >
+                  {templateSaving ? 'در حال ذخیره...' : 'ذخیره'}
+                </button>
+              </div>
             </div>
           </div>
         )}
