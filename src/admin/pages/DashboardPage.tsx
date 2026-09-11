@@ -1642,75 +1642,94 @@ export default function AdminDashboard() {
 
         {/* Template Edit Modal */}
         {editingTemplate && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="glass-card rounded-2xl p-6 w-full max-w-md max-h-[85vh] flex flex-col">
-              <div className="flex justify-between items-start gap-2 mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-white">{editingTemplate.title}</h3>
-                  <p className="text-xs text-gray-400 mt-1 font-mono" dir="ltr">{editingTemplate.template_key}</p>
-                </div>
-                <button
-                  onClick={() => setEditingTemplate(null)}
-                  className="text-gray-400 hover:text-gray-200 transition flex-shrink-0"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Placeholder help */}
-              <div className="mb-3 p-3 rounded-xl bg-navy-900/60 border border-navy-700/30">
-                <p className="text-xs text-gray-400 mb-2">متغیرهای قابل استفاده:</p>
-                <div className="grid grid-cols-2 gap-1 text-xs text-gray-500">
-                  <span dir="ltr">{'{order_id}'} — شماره سفارش</span>
-                  <span dir="ltr">{'{plan_name}'} — نام پلن</span>
-                  <span dir="ltr">{'{amount}'} — مبلغ</span>
-                  <span dir="ltr">{'{telegram_id}'} — آیدی تلگرام</span>
-                  <span dir="ltr">{'{first_name}'} — نام کاربر</span>
-                  <span dir="ltr">{'{username}'} — یوزرنیم تلگرام</span>
-                  <span dir="ltr">{'{user_display}'} — «telegram_id / first_name»</span>
-                  <span dir="ltr">{'{receipt}'} — کد پیگیری</span>
-                  <span dir="ltr">{'{radius_user}'} — یوزرنیم سرویس</span>
-                  <span dir="ltr">{'{password}'} — پسورد</span>
-                  <span dir="ltr">{'{expiry}'} — تاریخ انقضا</span>
-                  <span dir="ltr">{'{usage}'} — مصرف</span>
-                  <span dir="ltr">{'{quota}'} — حجم کل</span>
-                  <span dir="ltr">{'{days_left}'} — روزهای مانده</span>
-                  <span dir="ltr">{'{reject_reason}'} — دلیل رد</span>
-                  <span dir="ltr">{'{ticket_id}'} — شماره تیکت</span>
-                  <span dir="ltr">{'{subject}'} — موضوع</span>
-                  <span dir="ltr">{'{message}'} — متن پیام</span>
-                </div>
-              </div>
-
-              <textarea
-                value={templateEditText}
-                onChange={(e) => setTemplateEditText(e.target.value)}
-                disabled={templateSaving}
-                className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all resize-none disabled:opacity-50"
-                style={{ minHeight: '300px' }}
-                placeholder="متن پیام..."
-              />
-
-              {templateSaveError && (
-                <div className="mt-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
-                  {templateSaveError}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="glass-card rounded-2xl w-full max-w-2xl my-4 max-h-[95vh] flex flex-col">
+              {/* Success message */}
+              {templateMessage && (
+                <div className="flex-shrink-0 p-4 border-b border-navy-700/40">
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-success-500/10 border border-success-500/30 text-success-300 text-sm">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    {templateMessage}
+                  </div>
                 </div>
               )}
 
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={() => { setEditingTemplate(null); setTemplateSaveError('') }}
+              {/* Header */}
+              <div className="flex-shrink-0 p-4 border-b border-navy-700/40">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-white">{editingTemplate.title}</h3>
+                    <p className="text-xs text-gray-500 font-mono" dir="ltr">{editingTemplate.template_key}</p>
+                  </div>
+                  <button
+                    onClick={() => setEditingTemplate(null)}
+                    className="text-gray-400 hover:text-white p-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* Content - scroll area */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                <div className="bg-navy-900/60 rounded-xl p-3 border border-navy-700/40">
+                  <p className="text-xs text-gray-400 mb-2">متغیرهای قابل استفاده:</p>
+                  <div className="grid grid-cols-2 gap-1 text-xs">
+                    <span dir="ltr" className="text-gray-300">{'{order_id}'} — شماره سفارش</span>
+                    <span dir="ltr" className="text-gray-300">{'{plan_name}'} — نام پلن</span>
+                    <span dir="ltr" className="text-gray-300">{'{amount}'} — مبلغ</span>
+                    <span dir="ltr" className="text-gray-300">{'{telegram_id}'} — آیدی تلگرام</span>
+                    <span dir="ltr" className="text-gray-300">{'{first_name}'} — نام کاربر</span>
+                    <span dir="ltr" className="text-gray-300">{'{username}'} — یوزرنیم تلگرام</span>
+                    <span dir="ltr" className="text-gray-300">{'{user_display}'} — «telegram_id / first_name»</span>
+                    <span dir="ltr" className="text-gray-300">{'{receipt}'} — کد پیگیری</span>
+                    <span dir="ltr" className="text-gray-300">{'{radius_user}'} — یوزرنیم سرویس</span>
+                    <span dir="ltr" className="text-gray-300">{'{password}'} — پسورد</span>
+                    <span dir="ltr" className="text-gray-300">{'{expiry}'} — تاریخ انقضا</span>
+                    <span dir="ltr" className="text-gray-300">{'{usage}'} — مصرف</span>
+                    <span dir="ltr" className="text-gray-300">{'{quota}'} — حجم کل</span>
+                    <span dir="ltr" className="text-gray-300">{'{days_left}'} — روزهای مانده</span>
+                    <span dir="ltr" className="text-gray-300">{'{reject_reason}'} — دلیل رد</span>
+                    <span dir="ltr" className="text-gray-300">{'{ticket_id}'} — شماره تیکت</span>
+                    <span dir="ltr" className="text-gray-300">{'{subject}'} — موضوع</span>
+                    <span dir="ltr" className="text-gray-300">{'{message}'} — متن پیام</span>
+                  </div>
+                </div>
+
+                {/* Textarea */}
+                <textarea
+                  value={templateEditText}
+                  onChange={(e) => setTemplateEditText(e.target.value)}
                   disabled={templateSaving}
-                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 hover:border-navy-600 transition-all duration-300 disabled:opacity-50"
+                  className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all resize-none disabled:opacity-50"
+                  dir="ltr"
+                  rows={12}
+                  style={{ minHeight: '200px' }}
+                  placeholder="متن پیام..."
+                />
+
+                {templateSaveError && (
+                  <div className="p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                    {templateSaveError}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex-shrink-0 p-4 border-t border-navy-700/40 flex gap-2">
+                <button
+                  onClick={() => { setEditingTemplate(null); setTemplateSaveError(''); }}
+                  disabled={templateSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 disabled:opacity-50"
                 >
                   انصراف
                 </button>
                 <button
                   onClick={saveTemplate}
                   disabled={templateSaving}
-                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-sm font-semibold hover:from-primary-400 hover:to-primary-500 transition-all duration-300 glow-primary disabled:opacity-50"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-sm font-semibold text-white disabled:opacity-50"
                 >
                   {templateSaving ? 'در حال ذخیره...' : 'ذخیره'}
                 </button>
