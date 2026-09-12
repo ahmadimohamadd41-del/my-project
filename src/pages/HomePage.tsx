@@ -29,6 +29,7 @@ export default function HomePage() {
   const { initDataUnsafe } = useTelegram()
   const [accountData, setAccountData] = useState<VPSCustomerAccount | null>(null)
   const [subscriptionData, setSubscriptionData] = useState<SubscriptionData | null>(null)
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
   const [health, setHealth] = useState<Record<string, any> | null>(null)
   const [loading, setLoading] = useState(true)
   const [copiedField, setCopiedField] = useState('')
@@ -60,15 +61,23 @@ export default function HomePage() {
     const loadData = async () => {
       setLoading(true)
       try {
-        const [accData, healthData, subData] = await Promise.all([
+        const [accData, healthData, subData, walletData] = await Promise.all([
           externalRef ? accountsApi.getByExternalRef(externalRef) : Promise.resolve(null),
           healthApi.get(),
           user?.telegram_id ? purchasesApi.getMySubscription(user.telegram_id) : Promise.resolve(null),
+          user?.telegram_id
+            ? fetch(`https://varminiapp.popserver.shop/api/?action=my_wallet&telegram_id=${user.telegram_id}`)
+                .then((r) => r.json())
+                .catch(() => null)
+            : Promise.resolve(null),
         ])
         setAccountData(accData)
         setHealth(healthData)
         if (subData?.ok && subData.subscription) {
           setSubscriptionData(subData.subscription)
+        }
+        if (walletData?.ok) {
+          setWalletBalance(walletData.balance)
         }
       } catch (e) {
         console.error('Failed to load home data:', e)
@@ -212,7 +221,7 @@ export default function HomePage() {
                 </div>
                 <div className="p-3 rounded-xl bg-navy-800/40 border border-navy-700/30">
                   <p className="text-xl font-bold text-white">
-                    {accountData?.customer?.balance?.toLocaleString() || '0'}
+                    {walletBalance === null ? '...' : walletBalance.toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-400 mt-1">موجودی (تومان)</p>
                 </div>
@@ -341,3 +350,6 @@ export default function HomePage() {
     </div>
   )
 }
+
+
+

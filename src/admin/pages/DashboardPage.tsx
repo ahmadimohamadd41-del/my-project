@@ -85,6 +85,35 @@ type Template = {
   updated_at: string
 }
 
+type Discount = {
+  id: number
+  code: string
+  percent: number
+  max_uses: number | null
+  used_count: number
+  max_uses_per_user: number
+  min_order_amount: string | number
+  starts_at: string | null
+  expires_at: string | null
+  is_active: number
+  note?: string
+  created_at: string
+}
+
+type Redemption = {
+  id: number
+  discount_code_id: number
+  user_id: number
+  order_id: number | null
+  telegram_id: number
+  amount_before: number
+  discount_amount: number
+  amount_after: number
+  created_at: string
+  first_name?: string
+  username?: string
+}
+
 const ADMIN_TG_ID = 8869320234
 const API = 'https://varminiapp.popserver.shop/api'
 
@@ -130,7 +159,7 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'wallet' | 'settings' | 'users'>('orders')
+  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'wallet' | 'discount' | 'settings' | 'users'>('orders')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
@@ -220,6 +249,28 @@ export default function AdminDashboard() {
   const [walletNote, setWalletNote] = useState('')
   const [walletAdjusting, setWalletAdjusting] = useState(false)
   const [walletAdjustMessage, setWalletAdjustMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
+
+  // ─── Discount state ───
+  const [discounts, setDiscounts] = useState<Discount[]>([])
+  const [discountsLoading, setDiscountsLoading] = useState(false)
+  const [discountsError, setDiscountsError] = useState('')
+  const [showCreateDiscount, setShowCreateDiscount] = useState(false)
+  const [discountForm, setDiscountForm] = useState({
+    code: '',
+    percent: '',
+    max_uses: '',
+    max_uses_per_user: 1,
+    min_order_amount: 0,
+    starts_at: '',
+    expires_at: '',
+    note: '',
+  })
+  const [discountCreating, setDiscountCreating] = useState(false)
+  const [discountCreateError, setDiscountCreateError] = useState('')
+  const [selectedDiscount, setSelectedDiscount] = useState<Discount | null>(null)
+  const [redemptions, setRedemptions] = useState<Redemption[]>([])
+  const [redemptionsLoading, setRedemptionsLoading] = useState(false)
+  const [discountActionLoading, setDiscountActionLoading] = useState<Record<number, boolean>>({})
 
   const performUserAction = async (
     tgId: number,
@@ -635,6 +686,126 @@ export default function AdminDashboard() {
     }
   }
 
+  const loadDiscounts = async () => {
+    setDiscountsLoading(true)
+    setDiscountsError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_discount_list&admin_telegram_id=${resolvedId}`)
+      const data = await res.json()
+      if (data.ok) setDiscounts(data.discounts || [])
+      else setDiscountsError(data.error || 'خطا در دریافت کدها')
+    } catch (e: any) {
+      setDiscountsError(e?.message || 'خطای شبکه')
+    } finally {
+      setDiscountsLoading(false)
+    }
+  }
+
+  const createDiscount = async () => {
+    setDiscountCreating(true)
+    setDiscountCreateError('')
+    try {
+      const code = discountForm.code.trim().toUpperCase()
+      if (code.length < 3 || code.length > 32) {
+        setDiscountCreateError('کد باید بین ۳ تا ۳۲ حرف باشد')
+        setDiscountCreating(false)
+        return
+      }
+      if (!/^[A-Z0-9_]+$/.test(code)) {
+        setDiscountCreateError('کد فقط می‌تواند شامل A-Z، 0-9 و _ باشد')
+        setDiscountCreating(false)
+        return
+      }
+      const percent = Number(discountForm.percent)
+      if (!percent || percent < 1 || percent > 100) {
+        setDiscountCreateError('درصد باید بین ۱ تا ۱۰۰ باشد')
+        setDiscountCreating(false)
+        return
+      }
+
+      const res = await fetch(`${API}/?action=admin_discount_create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          code: code,
+          percent: percent,
+          max_uses: discountForm.max_uses ? Number(discountForm.max_uses) : null,
+          max_uses_per_user: Number(discountForm.max_uses_per_user) || 1,
+          min_order_amount: Number(discountForm.min_order_amount) || 0,
+          starts_at: discountForm.starts_at || null,
+          expires_at: discountForm.expires_at || null,
+          note: discountForm.note.trim() || null,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setShowCreateDiscount(false)
+        setDiscountForm({
+          code: '',
+          percent: '',
+          max_uses: '',
+          max_uses_per_user: 1,
+          min_order_amount: 0,
+          starts_at: '',
+          expires_at: '',
+          note: '',
+        })
+        setMessage('کد تخفیف ساخته شد')
+        await loadDiscounts()
+        setTimeout(() => setMessage(''), 3000)
+      } else {
+        setDiscountCreateError(data.error || 'خطا در ساخت کد')
+      }
+    } catch (e: any) {
+      setDiscountCreateError(e?.message || 'خطای شبکه')
+    } finally {
+      setDiscountCreating(false)
+    }
+  }
+
+  const toggleDiscount = async (id: number, isActive: boolean) => {
+    setDiscountActionLoading((prev) => ({ ...prev, [id]: true }))
+    try {
+      const res = await fetch(`${API}/?action=admin_discount_toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          id: id,
+          is_active: isActive ? 1 : 0,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        await loadDiscounts()
+      } else {
+        setMessage(data.error || 'خطا در تغییر وضعیت')
+        setTimeout(() => setMessage(''), 3000)
+      }
+    } catch (e: any) {
+      setMessage(e?.message || 'خطای شبکه')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setDiscountActionLoading((prev) => ({ ...prev, [id]: false }))
+    }
+  }
+
+  const openRedemptions = async (discount: Discount) => {
+    setSelectedDiscount(discount)
+    setRedemptionsLoading(true)
+    setRedemptions([])
+    try {
+      const res = await fetch(`${API}/?action=admin_discount_redemptions&admin_telegram_id=${resolvedId}&id=${discount.id}`)
+      const data = await res.json()
+      if (data.ok) setRedemptions(data.redemptions || [])
+    } catch (e: any) {
+      console.error('Redemptions error:', e)
+    } finally {
+      setRedemptionsLoading(false)
+    }
+  }
+
   const loadSettings = async () => {
     try {
       const res = await fetch(`${API}/?action=payment_settings`)
@@ -824,6 +995,12 @@ export default function AdminDashboard() {
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'wallet' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             کیف پول
+          </button>
+          <button
+            onClick={() => { setTab('discount'); if (discounts.length === 0) loadDiscounts() }}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'discount' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            «کد تخفیف»
           </button>
           <button
             onClick={() => setTab('settings')}
@@ -1318,6 +1495,107 @@ export default function AdminDashboard() {
           </>
         )}
 
+        {tab === 'discount' && (
+          <>
+            <div className="flex gap-2 mb-5">
+              <button
+                onClick={loadDiscounts}
+                className="px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300"
+              >
+                بروزرسانی
+              </button>
+              <button
+                onClick={() => { setShowCreateDiscount(true); setDiscountCreateError(''); }}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-success-500 to-success-600 text-sm font-semibold hover:from-success-400 hover:to-success-500 transition-all duration-300 shadow-lg shadow-success-500/20"
+              >
+                + کد جدید
+              </button>
+            </div>
+
+            {discountsError && (
+              <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                {discountsError}
+              </div>
+            )}
+
+            {discountsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="relative inline-flex">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary-500/20"></div>
+                  <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                </div>
+              </div>
+            ) : discounts.length === 0 ? (
+              <div className="glass-card rounded-2xl p-8 text-center text-gray-400">
+                هنوز کدی ساخته نشده.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {discounts.map((d) => {
+                  const isActive = d.is_active === 1
+                  const maxUsesText = d.max_uses !== null ? `${d.used_count} از ${d.max_uses}` : `${d.used_count} (نامحدود)`
+                  return (
+                    <div key={d.id} className={`glass-card glass-card-hover rounded-2xl p-4 ${!isActive ? 'opacity-60' : ''}`}>
+                      <div className="flex justify-between gap-2 mb-3">
+                        <div className="font-mono font-bold text-white text-lg" dir="ltr">{d.code}</div>
+                        <div className={`text-xs px-2.5 py-0.5 rounded-lg border ${isActive ? 'text-success-400 bg-success-500/10 border-success-500/20' : 'text-gray-500 bg-navy-800/60 border-navy-700/40'}`}>
+                          {isActive ? 'فعال' : 'غیرفعال'}
+                        </div>
+                      </div>
+
+                      <div className="text-sm text-gray-300 space-y-1.5 mb-4">
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">درصد تخفیف</span>
+                          <span className="text-white font-bold">{d.percent}%</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">استفاده</span>
+                          <span className="text-white">{maxUsesText}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">سقف هر کاربر</span>
+                          <span className="text-white">{d.max_uses_per_user}</span>
+                        </div>
+                        {Number(d.min_order_amount) > 0 && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">حداقل مبلغ</span>
+                            <span className="text-white">{Number(d.min_order_amount).toLocaleString('fa-IR')} تومان</span>
+                          </div>
+                        )}
+                        {d.expires_at && (
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">انقضا</span>
+                            <span className="text-white">{new Date(d.expires_at).toLocaleDateString('fa-IR')}</span>
+                          </div>
+                        )}
+                        {d.note && (
+                          <div className="text-xs text-gray-500 pt-1 border-t border-navy-700/30">{d.note}</div>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => toggleDiscount(d.id, !isActive)}
+                          disabled={!!discountActionLoading[d.id]}
+                          className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all duration-300 disabled:opacity-50 ${isActive ? 'bg-navy-800/60 text-gray-400 border border-navy-700/40' : 'bg-gradient-to-r from-success-500 to-success-600 text-white'}`}
+                        >
+                          {discountActionLoading[d.id] ? 'در حال...' : (isActive ? 'غیرفعال کن' : 'فعال کن')}
+                        </button>
+                        <button
+                          onClick={() => openRedemptions(d)}
+                          className="flex-1 py-2 rounded-xl bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20 text-sm font-semibold"
+                        >
+                          مصرف‌کنندگان
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+
         {tab === 'users' && (
           <>
             <button onClick={loadUsers} className="mb-5 px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300">
@@ -1537,6 +1815,198 @@ export default function AdminDashboard() {
             >
               {saving ? 'در حال ذخیره...' : 'ذخیره تنظیمات'}
             </button>
+          </div>
+        )}
+
+        {/* Create Discount Modal */}
+        {showCreateDiscount && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="glass-card rounded-2xl w-full max-w-md my-4 max-h-[90vh] flex flex-col">
+              <div className="flex-shrink-0 p-4 border-b border-navy-700/40">
+                <h3 className="text-lg font-bold text-white">کد تخفیف جدید</h3>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">کد * (فقط A-Z، 0-9، _)</label>
+                  <input
+                    value={discountForm.code}
+                    onChange={(e) => setDiscountForm({ ...discountForm, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                    placeholder="TEST10"
+                    dir="ltr"
+                    maxLength={32}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">درصد تخفیف * (1-100)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={discountForm.percent}
+                    onChange={(e) => setDiscountForm({ ...discountForm, percent: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                    placeholder="10"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">سقف کل (خالی=نامحدود)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={discountForm.max_uses}
+                      onChange={(e) => setDiscountForm({ ...discountForm, max_uses: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      placeholder="5"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">سقف هر کاربر</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={discountForm.max_uses_per_user}
+                      onChange={(e) => setDiscountForm({ ...discountForm, max_uses_per_user: Number(e.target.value) })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">حداقل مبلغ سفارش (تومان)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={discountForm.min_order_amount}
+                    onChange={(e) => setDiscountForm({ ...discountForm, min_order_amount: Number(e.target.value) })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">شروع (اختیاری)</label>
+                    <input
+                      type="datetime-local"
+                      value={discountForm.starts_at}
+                      onChange={(e) => setDiscountForm({ ...discountForm, starts_at: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">پایان (اختیاری)</label>
+                    <input
+                      type="datetime-local"
+                      value={discountForm.expires_at}
+                      onChange={(e) => setDiscountForm({ ...discountForm, expires_at: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">توضیح (اختیاری)</label>
+                  <textarea
+                    value={discountForm.note}
+                    onChange={(e) => setDiscountForm({ ...discountForm, note: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 resize-none"
+                    rows={2}
+                    placeholder="مثال: کمپین نوروز"
+                  />
+                </div>
+
+                {discountCreateError && (
+                  <div className="p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                    {discountCreateError}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex-shrink-0 p-4 border-t border-navy-700/40 flex gap-2">
+                <button
+                  onClick={() => { setShowCreateDiscount(false); setDiscountCreateError(''); }}
+                  disabled={discountCreating}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={createDiscount}
+                  disabled={discountCreating}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-success-500 to-success-600 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {discountCreating ? 'در حال ساخت...' : 'ساخت کد'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Redemptions Modal */}
+        {selectedDiscount && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="glass-card rounded-2xl p-5 w-full max-w-md max-h-[85vh] flex flex-col">
+              <div className="flex justify-between items-start gap-2 mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-white">مصرف‌کنندگان کد</h3>
+                  <p className="text-xs text-gray-400 font-mono mt-1" dir="ltr">{selectedDiscount.code}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedDiscount(null)}
+                  className="text-gray-400 hover:text-gray-200 transition"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto space-y-2">
+                {redemptionsLoading ? (
+                  <div className="flex justify-center py-6">
+                    <div className="relative inline-flex">
+                      <div className="w-8 h-8 rounded-full border-2 border-primary-500/20"></div>
+                      <div className="absolute inset-0 w-8 h-8 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                    </div>
+                  </div>
+                ) : redemptions.length === 0 ? (
+                  <p className="text-center text-gray-500 text-sm py-4">هنوز کسی از این کد استفاده نکرده</p>
+                ) : (
+                  redemptions.map((r) => (
+                    <div key={r.id} className="p-3 rounded-xl bg-navy-800/40 border border-navy-700/30">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="text-sm">
+                          <div className="text-white font-semibold">
+                            {r.first_name || 'کاربر'} {r.username ? `@${r.username}` : ''}
+                          </div>
+                          <div className="text-xs text-gray-500 font-mono mt-0.5" dir="ltr">{r.telegram_id}</div>
+                        </div>
+                        {r.order_id && (
+                          <div className="text-xs text-primary-400">سفارش #{r.order_id}</div>
+                        )}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-2">
+                        {Number(r.amount_before).toLocaleString('fa-IR')} → {Number(r.amount_after).toLocaleString('fa-IR')}
+                        <span className="text-success-400 mr-2">
+                          (تخفیف: {Number(r.discount_amount).toLocaleString('fa-IR')})
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        {new Date(r.created_at).toLocaleString('fa-IR')}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
 
