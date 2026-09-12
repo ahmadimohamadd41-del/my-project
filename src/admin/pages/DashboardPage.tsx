@@ -130,7 +130,7 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'settings' | 'users'>('orders')
+  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'wallet' | 'settings' | 'users'>('orders')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
@@ -210,6 +210,16 @@ export default function AdminDashboard() {
   const [templateSaving, setTemplateSaving] = useState(false)
   const [templateSaveError, setTemplateSaveError] = useState('')
   const [templateMessage, setTemplateMessage] = useState('')
+
+  // ─── Wallet state ───
+  const [walletSearchId, setWalletSearchId] = useState('')
+  const [walletUser, setWalletUser] = useState<{ telegram_id: number; first_name: string; balance: number; ledger: any[] } | null>(null)
+  const [walletLoading, setWalletLoading] = useState(false)
+  const [walletError, setWalletError] = useState('')
+  const [walletAmount, setWalletAmount] = useState('')
+  const [walletNote, setWalletNote] = useState('')
+  const [walletAdjusting, setWalletAdjusting] = useState(false)
+  const [walletAdjustMessage, setWalletAdjustMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
 
   const performUserAction = async (
     tgId: number,
@@ -551,6 +561,80 @@ export default function AdminDashboard() {
     }
   }
 
+  const searchWallet = async () => {
+    if (!walletSearchId.trim()) {
+      setWalletError('شناسه تلگرام را وارد کنید')
+      return
+    }
+    setWalletLoading(true)
+    setWalletError('')
+    setWalletUser(null)
+    try {
+      const res = await fetch(`${API}/?action=my_wallet&telegram_id=${walletSearchId.trim()}`)
+      const data = await res.json()
+      if (data.ok) {
+        setWalletUser({
+          telegram_id: Number(walletSearchId.trim()),
+          first_name: data.first_name || '—',
+          balance: Number(data.balance) || 0,
+          ledger: data.ledger || [],
+        })
+      } else {
+        setWalletError(data.error || 'کاربر یافت نشد')
+      }
+    } catch (e: any) {
+      setWalletError(e?.message || 'خطای شبکه')
+    } finally {
+      setWalletLoading(false)
+    }
+  }
+
+  const adjustWallet = async (isCredit: boolean) => {
+    if (!walletUser) return
+    const amt = Number(walletAmount)
+    if (!walletAmount.trim() || isNaN(amt) || amt <= 0) {
+      setWalletAdjustMessage({ type: 'error', text: 'مبلغ نامعتبر است' })
+      return
+    }
+    if (amt === 0) {
+      setWalletAdjustMessage({ type: 'error', text: 'مبلغ نمی‌تواند صفر باشد' })
+      return
+    }
+    if (!isCredit && amt > walletUser.balance) {
+      setWalletAdjustMessage({ type: 'error', text: 'موجودی کافی نیست' })
+      return
+    }
+    setWalletAdjusting(true)
+    setWalletAdjustMessage(null)
+    try {
+      const res = await fetch(`${API}/?action=admin_wallet_adjust`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          telegram_id: walletUser.telegram_id,
+          amount: isCredit ? amt : -amt,
+          note: walletNote.trim(),
+          idempotency_key: `admin-wallet-${Date.now()}-${walletSearchId}`,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setWalletAdjustMessage({ type: 'ok', text: isCredit ? 'کیف پول شارژ شد' : 'مبلغ کسر شد' })
+        setWalletAmount('')
+        setWalletNote('')
+        await searchWallet()
+        setTimeout(() => setWalletAdjustMessage(null), 3000)
+      } else {
+        setWalletAdjustMessage({ type: 'error', text: data.error || 'خطا در عملیات' })
+      }
+    } catch (e: any) {
+      setWalletAdjustMessage({ type: 'error', text: e?.message || 'خطای شبکه' })
+    } finally {
+      setWalletAdjusting(false)
+    }
+  }
+
   const loadSettings = async () => {
     try {
       const res = await fetch(`${API}/?action=payment_settings`)
@@ -734,6 +818,12 @@ export default function AdminDashboard() {
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'templates' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             پیام‌ها
+          </button>
+          <button
+            onClick={() => setTab('wallet')}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'wallet' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            کیف پول
           </button>
           <button
             onClick={() => setTab('settings')}
@@ -1096,6 +1186,133 @@ export default function AdminDashboard() {
                     <p className="text-xs text-gray-500">آخرین ویرایش: {new Date(tpl.updated_at).toLocaleString('fa-IR')}</p>
                   </div>
                 ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ─── Wallet Tab ─── */}
+        {tab === 'wallet' && (
+          <>
+            <div className="flex gap-2 mb-5">
+              <input
+                type="number"
+                value={walletSearchId}
+                onChange={(e) => setWalletSearchId(e.target.value.replace(/[^0-9]/g, ''))}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all font-mono"
+                placeholder="شناسه تلگرام"
+                dir="ltr"
+                onKeyDown={(e) => { if (e.key === 'Enter') searchWallet() }}
+              />
+              <button
+                onClick={searchWallet}
+                disabled={walletLoading}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-sm font-semibold hover:from-primary-400 hover:to-primary-500 transition-all duration-300 glow-primary disabled:opacity-50"
+              >
+                {walletLoading ? 'در حال...' : 'جستجو'}
+              </button>
+            </div>
+
+            {walletError && (
+              <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                {walletError}
+              </div>
+            )}
+
+            {walletUser && (
+              <div className="space-y-4">
+                {/* User info + balance */}
+                <div className="glass-card rounded-2xl p-5">
+                  <div className="flex justify-between items-start gap-2 mb-4">
+                    <div>
+                      <div className="font-bold text-white">{walletUser.first_name}</div>
+                      <div className="font-mono text-xs text-gray-400 mt-0.5" dir="ltr">{walletUser.telegram_id}</div>
+                    </div>
+                  </div>
+                  <div className="text-center py-3">
+                    <p className="text-xs text-gray-400 mb-1">موجودی فعلی</p>
+                    <p className="text-3xl font-bold text-primary-400">{walletUser.balance.toLocaleString('fa-IR')} <span className="text-lg text-gray-400">تومان</span></p>
+                  </div>
+                </div>
+
+                {/* Adjust section */}
+                <div className="glass-card rounded-2xl p-5">
+                  <h3 className="font-bold text-white mb-3">شارژ / کسر</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1.5">مبلغ (تومان)</label>
+                      <input
+                        type="number"
+                        value={walletAmount}
+                        onChange={(e) => setWalletAmount(e.target.value.replace(/[^0-9]/g, ''))}
+                        className="w-full px-4 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all font-mono"
+                        placeholder="50000"
+                        dir="ltr"
+                        min={1}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 mb-1.5">توضیح (اختیاری)</label>
+                      <input
+                        value={walletNote}
+                        onChange={(e) => setWalletNote(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 focus:border-primary-500/50 transition-all"
+                        placeholder="دلیل شارژ یا کسر..."
+                      />
+                    </div>
+
+                    {walletAdjustMessage && (
+                      <div className={`p-3 rounded-xl text-sm ${walletAdjustMessage.type === 'ok' ? 'bg-success-500/10 border border-success-500/30 text-success-300' : 'bg-error-500/10 border border-error-500/30 text-error-300'}`}>
+                        {walletAdjustMessage.text}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => adjustWallet(true)}
+                        disabled={walletAdjusting}
+                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-success-500 to-success-600 text-sm font-semibold hover:from-success-400 hover:to-success-500 transition-all duration-300 shadow-lg shadow-success-500/20 disabled:opacity-50"
+                      >
+                        {walletAdjusting ? 'در حال...' : 'شارژ'}
+                      </button>
+                      <button
+                        onClick={() => adjustWallet(false)}
+                        disabled={walletAdjusting}
+                        className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
+                      >
+                        {walletAdjusting ? 'در حال...' : 'کسر'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ledger */}
+                {walletUser.ledger.length > 0 && (
+                  <div className="glass-card rounded-2xl p-5">
+                    <h3 className="font-bold text-white mb-3">تاریخچه تراکنش‌ها</h3>
+                    <div className="space-y-2">
+                      {walletUser.ledger.slice(0, 20).map((entry: any, i: number) => {
+                        const amount = Number(entry.amount) || 0
+                        const isPositive = amount > 0
+                        return (
+                          <div key={i} className="flex justify-between items-center gap-2 py-2 border-b border-navy-700/30 last:border-0">
+                            <div className="flex-1 min-w-0">
+                              <div className={`text-sm font-semibold ${isPositive ? 'text-success-400' : 'text-error-400'}`} dir="ltr">
+                                {isPositive ? '+' : ''}{amount.toLocaleString('fa-IR')} تومان
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {entry.note || entry.type || '—'} · {entry.created_at ? new Date(entry.created_at).toLocaleString('fa-IR') : '—'}
+                              </div>
+                            </div>
+                            <div className="text-xs text-gray-400 font-mono whitespace-nowrap" dir="ltr">
+                              {entry.balance_after != null ? Number(entry.balance_after).toLocaleString('fa-IR') : '—'}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>
