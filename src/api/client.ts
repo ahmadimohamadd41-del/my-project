@@ -103,20 +103,29 @@ export const authApi = {
 }
 
 export const purchasesApi = {
-  // ─── ایجاد سفارش جدید (با telegram_id و idempotency) ───
+  // ─── ایجاد سفارش جدید (با telegram_id, discount_code, و idempotency) ───
   createOrder: async (
     planCode: string,
     paymentMethod: 'card_to_card' | 'gateway' = 'card_to_card',
     referenceNumber?: string,
-    telegramId?: number
+    telegramId?: number,
+    discountCode?: string,
+    idempotencyKey?: string
   ) => {
-    const response = await cpanelApi.post('?action=create_order', {
+    const body: Record<string, any> = {
       plan_code: planCode,
       payment_method: paymentMethod,
       reference_number: referenceNumber,
       telegram_id: telegramId,
-      idempotency_key: `web-${telegramId || 0}-${planCode}-${Date.now()}`,
-    })
+      idempotency_key:
+        idempotencyKey || `web-${telegramId || 0}-${planCode}-${Date.now()}`,
+    }
+    // فقط اگه کد تخفیف داشت بفرست
+    if (discountCode && discountCode.trim() !== '') {
+      body.discount_code = discountCode.trim().toUpperCase()
+    }
+
+    const response = await cpanelApi.post('?action=create_order', body)
     return response.data
   },
 

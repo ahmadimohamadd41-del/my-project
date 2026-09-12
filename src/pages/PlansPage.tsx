@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { plansApi, purchasesApi, VPSPlan } from '@/api/client'
 import { useAuth } from '@/hooks/useAuth'
 import Button from '@/components/ui/Button'
@@ -30,6 +30,20 @@ export default function PlansPage() {
     card_number: '',
     card_holder_name: '',
   })
+  const [discountCode, setDiscountCode] = useState('')
+  const [discountValidating, setDiscountValidating] = useState(false)
+  const [discountInfo, setDiscountInfo] = useState<{
+    code: string
+    percent: number
+    amount_before: number
+    discount_amount: number
+    amount_after: number
+  } | null>(null)
+  const [discountError, setDiscountError] = useState('')
+
+  // جلوگیری از ثبت تکراری
+  const submittingRef = useRef(false)
+  const [purchaseAttemptKey, setPurchaseAttemptKey] = useState('')
 
   const loadSettings = async () => {
     try {
@@ -67,43 +81,103 @@ export default function PlansPage() {
   const handlePurchase = async () => {
     if (!selectedPlan) return
 
+    if (submittingRef.current) return
+    submittingRef.current = true
+
     const telegramId =
       Number(user?.telegram_id) ||
       Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) ||
       0
 
-    console.log('purchase telegramId=', telegramId, 'user=', user)
-
     if (!telegramId) {
-      setSubmitting(false)
+      submittingRef.current = false
       setFormError('هویت تلگرام شناسایی نشد. لطفاً اپ را از داخل تلگرام (لینک ربات) باز کنید.')
       return
     }
 
     if (!refNumber) {
-      setSubmitting(false)
+      submittingRef.current = false
       setFormError('شماره پیگیری را وارد کنید')
       return
     }
 
     setSubmitting(true)
+    setFormError('')
     try {
       await purchasesApi.createOrder(
         selectedPlan.plan_code,
         'card_to_card',
         refNumber.trim(),
-        telegramId
+        telegramId,
+        discountInfo?.code,
+        purchaseAttemptKey,
       )
       setSuccessMessage('سفارش شما با موفقیت ثبت شد و پس از بررسی فعال خواهد شد.')
       setTimeout(() => {
         setSelectedPlan(null)
+        setDiscountCode('')
+        setDiscountInfo(null)
+        setDiscountError('')
         setSuccessMessage(null)
         setRefNumber('')
+        setPurchaseAttemptKey('')
       }, 3000)
     } catch (e: any) {
       setFormError('خطا در ثبت سفارش: ' + (e?.response?.data?.error || e.message))
     } finally {
       setSubmitting(false)
+      submittingRef.current = false
+    }
+  }
+
+  const validateDiscount = async () => {
+    const code = discountCode.trim().toUpperCase()
+    if (!code) {
+      setDiscountInfo(null)
+      setDiscountError('')
+      return
+    }
+    if (!selectedPlan) return
+
+    const telegramId = Number(user?.telegram_id) ||
+      Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0
+
+    if (!telegramId) {
+      setDiscountError('هویت تلگرام شناسایی نشد')
+      return
+    }
+
+    setDiscountValidating(true)
+    setDiscountError('')
+    try {
+      const res = await fetch('https://varminiapp.popserver.shop/api/?action=validate_discount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: telegramId,
+          code: code,
+          plan_code: selectedPlan.plan_code,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setDiscountInfo({
+          code: data.code,
+          percent: data.percent,
+          amount_before: data.amount_before,
+          discount_amount: data.discount_amount,
+          amount_after: data.amount_after,
+        })
+        setDiscountError('')
+      } else {
+        setDiscountInfo(null)
+        setDiscountError(data.error || 'کد تخفیف معتبر نیست')
+      }
+    } catch (e: any) {
+      setDiscountInfo(null)
+      setDiscountError('خطای شبکه')
+    } finally {
+      setDiscountValidating(false)
     }
   }
 
@@ -112,6 +186,30 @@ export default function PlansPage() {
     const gb = bytes / (1024 * 1024 * 1024)
     if (gb >= 1) return `${gb.toFixed(0)} گیگابایت`
     return `${(bytes / (1024 * 1024)).toFixed(0)} مگابایت`
+  }
+
+  // باز کردن مودال با ساخت idempotency key جدید
+  const openPurchaseModal = (plan: VPSPlan) => {
+    const tgId = Number(user?.telegram_id) ||
+      Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0
+    setSelectedPlan(plan)
+    setFormError('')
+    setRefNumber('')
+    setDiscountCode('')
+    setDiscountInfo(null)
+    setDiscountError('')
+    setPurchaseAttemptKey(`ui-order-${Date.now()}-${tgId}`)
+  }
+
+  // بستن مودال با پاک کردن همه چیز
+  const closePurchaseModal = () => {
+    setSelectedPlan(null)
+    setDiscountCode('')
+    setDiscountInfo(null)
+    setDiscountError('')
+    setRefNumber('')
+    setFormError('')
+    setPurchaseAttemptKey('')
   }
 
   if (loading) {
@@ -164,11 +262,7 @@ export default function PlansPage() {
 
               <Button
                 variant="primary"
-                onClick={() => {
-                  setSelectedPlan(plan)
-                  setFormError('')
-                  setRefNumber('')
-                }}
+                onClick={() => openPurchaseModal(plan)}
               >
                 خرید پلن
               </Button>
@@ -179,89 +273,165 @@ export default function PlansPage() {
         {/* Purchase Modal */}
         {selectedPlan && (
           <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 p-4 animate-fade-in">
-            <Card className="w-full max-w-md p-6 animate-slide-up">
-              <h2 className="text-xl font-bold text-white mb-5">
-                خرید پلن: {selectedPlan.display_name}
-              </h2>
+            <Card className="w-full max-w-md animate-slide-up flex flex-col max-h-[90vh]">
+              <div className="flex-1 overflow-y-auto p-6">
+                <h2 className="text-xl font-bold text-white mb-5">
+                  خرید پلن: {selectedPlan.display_name}
+                </h2>
 
-              {successMessage ? (
-                <div className="p-5 bg-success-500/10 border border-success-500/30 text-success-300 rounded-xl text-center mb-4">
-                  <svg className="w-12 h-12 mx-auto mb-3 text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {successMessage}
-                </div>
-              ) : (
-                <>
-                  <div className="mb-6 space-y-2.5 text-sm text-gray-300">
-                    <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
-                      <span>حجم ترافیک:</span>
-                      <span className="font-bold text-white">{formatQuota(selectedPlan.quota_bytes)}</span>
-                    </div>
-                    <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
-                      <span>مبلغ قابل پرداخت:</span>
-                      <span className="font-bold text-primary-400">{selectedPlan.price_amount?.toLocaleString()} تومان</span>
-                    </div>
+                {successMessage ? (
+                  <div className="p-5 bg-success-500/10 border border-success-500/30 text-success-300 rounded-xl text-center mb-4">
+                    <svg className="w-12 h-12 mx-auto mb-3 text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    {successMessage}
                   </div>
+                ) : (
+                  <>
+                    <div className="mb-6 space-y-2.5 text-sm text-gray-300">
+                      <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
+                        <span>حجم ترافیک:</span>
+                        <span className="font-bold text-white">{formatQuota(selectedPlan.quota_bytes)}</span>
+                      </div>
 
-                  <div className="mb-6 bg-navy-900/60 p-4 rounded-xl border border-warning-500/20 text-xs text-gray-300 space-y-2">
-                    <p className="font-semibold text-warning-400 flex items-center gap-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                      </svg>
-                      اطلاعات کارت به کارت:
-                    </p>
-                    <p>
-                      شماره کارت:{' '}
-                      <span className="font-mono text-white">
-                        {settings.card_number || 'در حال بارگذاری...'}
-                      </span>
-                    </p>
-                    <p>
-                      به نام:{' '}
-                      <span className="text-white">
-                        {settings.card_holder_name || 'در حال بارگذاری...'}
-                      </span>
-                    </p>
-                  </div>
+                      {discountInfo === null ? (
+                        <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
+                          <span>مبلغ قابل پرداخت:</span>
+                          <span className="font-bold text-primary-400">{selectedPlan.price_amount?.toLocaleString()} تومان</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
+                            <span>مبلغ اصلی:</span>
+                            <span className="font-bold text-white">{discountInfo.amount_before.toLocaleString()} تومان</span>
+                          </div>
+                          <div className="flex justify-between p-2.5 rounded-lg bg-success-500/10 border border-success-500/20">
+                            <span>تخفیف ({discountInfo.percent}%):</span>
+                            <span className="font-bold text-success-400">
+                              - {discountInfo.discount_amount.toLocaleString()} تومان
+                            </span>
+                          </div>
+                          <div className="flex justify-between p-2.5 rounded-lg bg-primary-500/10 border border-primary-500/20">
+                            <span>مبلغ نهایی:</span>
+                            <span className="font-bold text-primary-300 text-lg">
+                              {discountInfo.amount_after.toLocaleString()} تومان
+                            </span>
+                          </div>
+                        </>
+                      )}
+                    </div>
 
-                  <div className="mb-6">
-                    <Input
-                      label="شماره پیگیری / ارجاع کارت به کارت"
-                      placeholder="مثلاً: 12345678"
-                      value={refNumber}
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      aria-invalid={Boolean(formError)}
-                      onChange={e => {
-                        setRefNumber(normalizeReferenceNumber(e.target.value))
-                        setFormError('')
-                      }}
-                    />
-                    {formError && (
-                      <p className="mt-2 text-sm text-error-400" role="alert">
-                        {formError}
+                    <div className="mb-6 bg-navy-900/60 p-4 rounded-xl border border-warning-500/20 text-xs text-gray-300 space-y-2">
+                      <p className="font-semibold text-warning-400 flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                        اطلاعات کارت به کارت:
                       </p>
-                    )}
-                  </div>
+                      <p>
+                        شماره کارت:{' '}
+                        <span className="font-mono text-white">
+                          {settings.card_number || 'در حال بارگذاری...'}
+                        </span>
+                      </p>
+                      <p>
+                        به نام:{' '}
+                        <span className="text-white">
+                          {settings.card_holder_name || 'در حال بارگذاری...'}
+                        </span>
+                      </p>
+                    </div>
 
-                  <div className="flex gap-3 justify-end">
-                    <Button
-                      variant="ghost"
-                      onClick={() => setSelectedPlan(null)}
-                      disabled={submitting}
-                    >
-                      انصراف
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={handlePurchase}
-                      loading={submitting}
-                    >
-                      ثبت و تأیید پرداخت
-                    </Button>
-                  </div>
-                </>
+                    {/* کد تخفیف */}
+                    <div className="mb-5">
+                      <label className="block text-sm text-gray-300 mb-2">کد تخفیف (اختیاری)</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={discountCode}
+                          onChange={(e) => {
+                            setDiscountCode(e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, ''))
+                            setDiscountInfo(null)
+                            setDiscountError('')
+                          }}
+                          placeholder="مثلاً WELCOME20"
+                          dir="ltr"
+                          maxLength={32}
+                          className="flex-1 px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                        />
+                        <Button
+                          variant="ghost"
+                          onClick={validateDiscount}
+                          loading={discountValidating}
+                          disabled={!discountCode.trim()}
+                        >
+                          اعمال
+                        </Button>
+                      </div>
+
+                      {discountError && (
+                        <p className="mt-2 text-sm text-error-400">{discountError}</p>
+                      )}
+
+                      {discountInfo && (
+                        <div className="mt-3 p-3 rounded-xl bg-success-500/10 border border-success-500/30 text-success-300 text-sm flex justify-between items-center">
+                          <span>
+                            ✅ کد <span className="font-mono font-bold">{discountInfo.code}</span> اعمال شد
+                            ({discountInfo.percent}% تخفیف)
+                          </span>
+                          <button
+                            onClick={() => {
+                              setDiscountInfo(null)
+                              setDiscountCode('')
+                            }}
+                            className="text-error-400 hover:text-error-300 text-xs"
+                          >
+                            حذف
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mb-2">
+                      <Input
+                        label="شماره پیگیری / ارجاع کارت به کارت"
+                        placeholder="مثلاً: 12345678"
+                        value={refNumber}
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        aria-invalid={Boolean(formError)}
+                        onChange={e => {
+                          setRefNumber(normalizeReferenceNumber(e.target.value))
+                          setFormError('')
+                        }}
+                      />
+                      {formError && (
+                        <p className="mt-2 text-sm text-error-400" role="alert">
+                          {formError}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {!successMessage && (
+                <div className="flex-shrink-0 p-4 border-t border-navy-700/40 flex gap-3 justify-end bg-navy-900/40">
+                  <Button
+                    variant="ghost"
+                    onClick={closePurchaseModal}
+                    disabled={submitting}
+                  >
+                    انصراف
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handlePurchase}
+                    loading={submitting}
+                  >
+                    ثبت و تأیید پرداخت
+                  </Button>
+                </div>
               )}
             </Card>
           </div>

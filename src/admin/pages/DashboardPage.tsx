@@ -214,6 +214,7 @@ export default function AdminDashboard() {
   const [deleteModalPlan, setDeleteModalPlan] = useState<AdminPlan | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [deleteForceConfirm, setDeleteForceConfirm] = useState<{ plan: AdminPlan; ordersCount: number } | null>(null)
 
   // ─── Tickets state ───
   const [tickets, setTickets] = useState<Ticket[]>([])
@@ -271,6 +272,26 @@ export default function AdminDashboard() {
   const [redemptions, setRedemptions] = useState<Redemption[]>([])
   const [redemptionsLoading, setRedemptionsLoading] = useState(false)
   const [discountActionLoading, setDiscountActionLoading] = useState<Record<number, boolean>>({})
+
+  // ─── Edit Discount state ───
+  const [editingDiscount, setEditingDiscount] = useState<Discount | null>(null)
+  const [editForm, setEditForm] = useState({
+    code: '',
+    percent: '',
+    max_uses: '' as string | number,
+    max_uses_per_user: 1,
+    min_order_amount: 0,
+    starts_at: '',
+    expires_at: '',
+    note: '',
+  })
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState('')
+
+  // ─── Delete Discount state ───
+  const [deletingDiscount, setDeletingDiscount] = useState<Discount | null>(null)
+  const [discountDeleteLoading, setDiscountDeleteLoading] = useState(false)
+  const [discountDeleteError, setDiscountDeleteError] = useState('')
 
   const performUserAction = async (
     tgId: number,
@@ -441,7 +462,7 @@ export default function AdminDashboard() {
     }
   }
 
-  const deletePlan = async () => {
+  const deletePlan = async (force: boolean = false) => {
     if (!deleteModalPlan) return
     setDeleteLoading(true)
     setDeleteError('')
@@ -452,14 +473,19 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           admin_telegram_id: resolvedId,
           plan_id: deleteModalPlan.id,
+          force: force,
         }),
       })
       const data = await res.json()
       if (data.ok) {
         setDeleteModalPlan(null)
+        setDeleteForceConfirm(null)
         setMessage('پلن حذف شد')
         await loadPlans()
         setTimeout(() => setMessage(''), 3000)
+      } else if (data.can_force) {
+        // پلن سفارش داره → نمایش تأیید دوم
+        setDeleteForceConfirm({ plan: deleteModalPlan, ordersCount: data.orders_count })
       } else {
         setDeleteError(data.error || 'خطا در حذف پلن')
       }
@@ -529,6 +555,18 @@ export default function AdminDashboard() {
         setTicketReply('')
         await openTicket(selectedTicket)
         await loadTickets()
+
+        // ─── بررسی وضعیت ارسال نوتیف ───
+        if (data.notify_sent === false && data.notify_error) {
+          setTicketActionMessage(`⚠️ پاسخ ثبت شد ولی پیام تلگرام به کاربر نرسید: ${data.notify_error}`)
+          setTimeout(() => setTicketActionMessage(''), 8000)
+        } else if (data.notify_sent === true) {
+          setTicketActionMessage('✅ پاسخ ثبت شد و پیام تلگرام به کاربر ارسال شد')
+          setTimeout(() => setTicketActionMessage(''), 3000)
+        } else {
+          setTicketActionMessage('پاسخ ثبت شد')
+          setTimeout(() => setTicketActionMessage(''), 3000)
+        }
       } else {
         setTicketReplyError(data.error || 'خطا در ارسال پاسخ')
       }
@@ -806,6 +844,114 @@ export default function AdminDashboard() {
     }
   }
 
+  const openEdit = (discount: Discount) => {
+    setEditingDiscount(discount)
+    setEditForm({
+      code: discount.code,
+      percent: String(discount.percent),
+      max_uses: discount.max_uses ?? '',
+      max_uses_per_user: discount.max_uses_per_user,
+      min_order_amount: Number(discount.min_order_amount) || 0,
+      starts_at: discount.starts_at
+        ? discount.starts_at.replace(' ', 'T').slice(0, 16)
+        : '',
+      expires_at: discount.expires_at
+        ? discount.expires_at.replace(' ', 'T').slice(0, 16)
+        : '',
+      note: discount.note || '',
+    })
+    setEditError('')
+  }
+
+  const saveEdit = async () => {
+    if (!editingDiscount) return
+    setEditSaving(true)
+    setEditError('')
+    try {
+      const code = editForm.code.trim().toUpperCase()
+      if (code.length < 3 || code.length > 32) {
+        setEditError('کد باید بین ۳ تا ۳۲ حرف باشد')
+        setEditSaving(false)
+        return
+      }
+      if (!/^[A-Z0-9_]+$/.test(code)) {
+        setEditError('کد فقط می‌تواند شامل A-Z، 0-9 و _ باشد')
+        setEditSaving(false)
+        return
+      }
+      const percent = Number(editForm.percent)
+      if (!percent || percent < 1 || percent > 100) {
+        setEditError('درصد باید بین ۱ تا ۱۰۰ باشد')
+        setEditSaving(false)
+        return
+      }
+
+      const res = await fetch(`${API}/?action=admin_discount_update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          id: editingDiscount.id,
+          code: code,
+          percent: percent,
+          max_uses: editForm.max_uses ? Number(editForm.max_uses) : null,
+          max_uses_per_user: Number(editForm.max_uses_per_user) || 1,
+          min_order_amount: Number(editForm.min_order_amount) || 0,
+          starts_at: editForm.starts_at || null,
+          expires_at: editForm.expires_at || null,
+          note: editForm.note.trim() || null,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setEditingDiscount(null)
+        setMessage('کد تخفیف ویرایش شد')
+        await loadDiscounts()
+        setTimeout(() => setMessage(''), 3000)
+      } else {
+        setEditError(data.error || 'خطا در ویرایش')
+      }
+    } catch (e: any) {
+      setEditError(e?.message || 'خطای شبکه')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deletingDiscount) return
+    setDiscountDeleteLoading(true)
+    setDiscountDeleteError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_discount_delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          id: deletingDiscount.id,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setDeletingDiscount(null)
+        const redCount = Number(data.deleted_redemptions) || 0
+        setMessage(
+          redCount > 0
+            ? `کد تخفیف حذف شد (${redCount} مصرف مرتبط هم پاک شد)`
+            : 'کد تخفیف حذف شد'
+        )
+        await loadDiscounts()
+        setTimeout(() => setMessage(''), 3500)
+      } else {
+        setDiscountDeleteError(data.error || 'خطا در حذف')
+      }
+    } catch (e: any) {
+      setDiscountDeleteError(e?.message || 'خطای شبکه')
+    } finally {
+      setDiscountDeleteLoading(false)
+    }
+  }
+
   const loadSettings = async () => {
     try {
       const res = await fetch(`${API}/?action=payment_settings`)
@@ -962,19 +1108,19 @@ export default function AdminDashboard() {
         {/* Tabs */}
         <div className="flex gap-2 mb-5 p-1 rounded-xl bg-navy-900/60 border border-navy-700/40 w-fit flex-wrap">
           <button
-            onClick={() => setTab('orders')}
+            onClick={() => { setTab('orders'); loadOrders() }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'orders' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             سفارش‌ها
           </button>
           <button
-            onClick={() => { setTab('plans'); if (plans.length === 0) loadPlans() }}
+            onClick={() => { setTab('plans'); loadPlans() }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'plans' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             پلن‌ها
           </button>
           <button
-            onClick={() => { setTab('tickets'); if (tickets.length === 0) loadTickets() }}
+            onClick={() => { setTab('tickets'); loadTickets() }}
             className={`relative px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'tickets' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             تیکت‌ها
@@ -985,7 +1131,7 @@ export default function AdminDashboard() {
             )}
           </button>
           <button
-            onClick={() => { setTab('templates'); if (templates.length === 0) loadTemplates() }}
+            onClick={() => { setTab('templates'); loadTemplates() }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'templates' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             پیام‌ها
@@ -997,10 +1143,10 @@ export default function AdminDashboard() {
             کیف پول
           </button>
           <button
-            onClick={() => { setTab('discount'); if (discounts.length === 0) loadDiscounts() }}
+            onClick={() => { setTab('discount'); loadDiscounts() }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'discount' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
-            «کد تخفیف»
+            کد تخفیف
           </button>
           <button
             onClick={() => setTab('settings')}
@@ -1009,7 +1155,7 @@ export default function AdminDashboard() {
             تنظیمات
           </button>
           <button
-            onClick={() => { setTab('users'); if (users.length === 0) loadUsers() }}
+            onClick={() => { setTab('users'); loadUsers() }}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'users' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             کاربران
@@ -1242,7 +1388,13 @@ export default function AdminDashboard() {
             </button>
 
             {ticketActionMessage && (
-              <div className="mb-4 p-3.5 rounded-xl bg-success-500/10 border border-success-500/30 text-success-300 text-sm">
+              <div className={`mb-4 p-3.5 rounded-xl text-sm ${
+                ticketActionMessage.startsWith('⚠️')
+                  ? 'bg-warning-500/10 border border-warning-500/30 text-warning-300'
+                  : ticketActionMessage.startsWith('✅')
+                  ? 'bg-success-500/10 border border-success-500/30 text-success-300'
+                  : 'bg-success-500/10 border border-success-500/30 text-success-300'
+              }`}>
                 {ticketActionMessage}
               </div>
             )}
@@ -1579,15 +1731,27 @@ export default function AdminDashboard() {
                           disabled={!!discountActionLoading[d.id]}
                           className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all duration-300 disabled:opacity-50 ${isActive ? 'bg-navy-800/60 text-gray-400 border border-navy-700/40' : 'bg-gradient-to-r from-success-500 to-success-600 text-white'}`}
                         >
-                          {discountActionLoading[d.id] ? 'در حال...' : (isActive ? 'غیرفعال کن' : 'فعال کن')}
+                          {discountActionLoading[d.id] ? '...' : (isActive ? 'غیرفعال' : 'فعال')}
                         </button>
                         <button
-                          onClick={() => openRedemptions(d)}
-                          className="flex-1 py-2 rounded-xl bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20 text-sm font-semibold"
+                          onClick={() => openEdit(d)}
+                          className="flex-1 py-2 rounded-xl bg-warning-500/15 text-warning-300 hover:bg-warning-500/25 border border-warning-500/20 text-sm font-semibold"
                         >
-                          مصرف‌کنندگان
+                          ✏️ ویرایش
+                        </button>
+                        <button
+                          onClick={() => { setDeletingDiscount(d); setDiscountDeleteError('') }}
+                          className="flex-1 py-2 rounded-xl bg-error-500/15 text-error-300 hover:bg-error-500/25 border border-error-500/20 text-sm font-semibold"
+                        >
+                          🗑 حذف
                         </button>
                       </div>
+                      <button
+                        onClick={() => openRedemptions(d)}
+                        className="w-full mt-2 py-2 rounded-xl bg-primary-500/15 text-primary-300 hover:bg-primary-500/25 transition-all duration-200 border border-primary-500/20 text-sm font-semibold"
+                      >
+                        مشاهده مصرف‌کنندگان
+                      </button>
                     </div>
                   )
                 })}
@@ -1952,6 +2116,170 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Edit Discount Modal */}
+        {editingDiscount && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+            <div className="glass-card rounded-2xl w-full max-w-md my-4 max-h-[95vh] flex flex-col">
+              <div className="flex-shrink-0 p-4 border-b border-navy-700/40">
+                <h3 className="text-lg font-bold text-white">ویرایش کد تخفیف</h3>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">کد * (فقط A-Z، 0-9، _)</label>
+                  <input
+                    value={editForm.code}
+                    onChange={(e) => setEditForm({ ...editForm, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '') })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                    dir="ltr"
+                    maxLength={32}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">درصد تخفیف * (1-100)</label>
+                  <input
+                    type="number" min={1} max={100}
+                    value={editForm.percent}
+                    onChange={(e) => setEditForm({ ...editForm, percent: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">سقف کل (خالی=نامحدود)</label>
+                    <input
+                      type="number" min={1}
+                      value={editForm.max_uses}
+                      onChange={(e) => setEditForm({ ...editForm, max_uses: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">سقف هر کاربر</label>
+                    <input
+                      type="number" min={1}
+                      value={editForm.max_uses_per_user}
+                      onChange={(e) => setEditForm({ ...editForm, max_uses_per_user: Number(e.target.value) })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">حداقل مبلغ سفارش (تومان)</label>
+                  <input
+                    type="number" min={0}
+                    value={editForm.min_order_amount}
+                    onChange={(e) => setEditForm({ ...editForm, min_order_amount: Number(e.target.value) })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">شروع (اختیاری)</label>
+                    <input
+                      type="datetime-local"
+                      value={editForm.starts_at}
+                      onChange={(e) => setEditForm({ ...editForm, starts_at: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      dir="ltr"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">پایان (اختیاری)</label>
+                    <input
+                      type="datetime-local"
+                      value={editForm.expires_at}
+                      onChange={(e) => setEditForm({ ...editForm, expires_at: e.target.value })}
+                      className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40"
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">توضیح (اختیاری)</label>
+                  <textarea
+                    value={editForm.note}
+                    onChange={(e) => setEditForm({ ...editForm, note: e.target.value })}
+                    className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/40 resize-none"
+                    rows={2}
+                  />
+                </div>
+
+                {editError && (
+                  <div className="p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                    {editError}
+                  </div>
+                )}
+              </div>
+              <div className="flex-shrink-0 p-4 border-t border-navy-700/40 flex gap-2">
+                <button
+                  onClick={() => { setEditingDiscount(null); setEditError('') }}
+                  disabled={editSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={saveEdit}
+                  disabled={editSaving}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-warning-500 to-warning-600 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {editSaving ? 'در حال ذخیره...' : 'ذخیره تغییرات'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Discount Confirm Modal */}
+        {deletingDiscount && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="glass-card rounded-2xl p-5 w-full max-w-sm">
+              <h3 className="text-lg font-bold text-white mb-3">حذف کد تخفیف</h3>
+              <p className="text-sm text-gray-300 mb-4">
+                آیا از حذف کد <span className="font-mono font-bold text-white" dir="ltr">{deletingDiscount.code}</span> مطمئنید؟
+              </p>
+              {deletingDiscount.used_count > 0 && (
+                <div className="mb-3 p-3 rounded-xl bg-warning-500/10 border border-warning-500/30 text-warning-300 text-xs">
+                  ⚠️ این کد {deletingDiscount.used_count} بار استفاده شده است.
+                  با حذف، سابقه‌ی این مصرف‌ها از سیستم تخفیف پاک می‌شود
+                  (ولی سفارش‌های ثبت‌شده دست‌نخورده می‌مانند).
+                </div>
+              )}
+              {discountDeleteError && (
+                <div className="mb-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                  {discountDeleteError}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setDeletingDiscount(null); setDiscountDeleteError('') }}
+                  disabled={discountDeleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={discountDeleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {discountDeleteLoading ? 'در حال حذف...' : 'بله، حذف کن'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Redemptions Modal */}
         {selectedDiscount && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -2183,11 +2511,44 @@ export default function AdminDashboard() {
                   انصراف
                 </button>
                 <button
-                  onClick={deletePlan}
+                  onClick={() => deletePlan(false)}
                   disabled={deleteLoading}
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
                 >
                   {deleteLoading ? 'در حال حذف...' : 'بله، حذف کن'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Force Delete Plan Confirm Modal */}
+        {deleteForceConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md">
+              <h3 className="text-lg font-bold text-red-400 mb-2">⚠️ حذف اجباری</h3>
+              <p className="text-sm text-gray-400 mb-5">
+                این پلن در <span className="text-white font-bold">{deleteForceConfirm.ordersCount} سفارش</span> استفاده شده است.
+                <br /><br />
+                با حذف اجباری، اطلاعات پلن از تمام سفارش‌های مرتبط حذف می‌شود و برگشت‌پذیر نیست.
+                <br /><br />
+                <span className="text-red-400 font-bold">آیا مطمئنید؟</span>
+              </p>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setDeleteForceConfirm(null); setDeleteModalPlan(null); setDeleteError('') }}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={() => deletePlan(true)}
+                  disabled={deleteLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-600 to-error-700 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {deleteLoading ? 'در حال حذف...' : 'بله، اجباری حذف کن'}
                 </button>
               </div>
             </div>
