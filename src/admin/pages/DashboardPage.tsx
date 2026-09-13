@@ -114,6 +114,22 @@ type Redemption = {
   username?: string
 }
 
+type WalletTopup = {
+  id: number
+  user_id: number
+  telegram_id: number
+  amount: string | number
+  reference_number: string
+  status: 'pending' | 'approved' | 'rejected'
+  reject_reason: string | null
+  approved_by: number | null
+  approved_at: string | null
+  created_at: string
+  updated_at: string
+  first_name?: string
+  username?: string
+}
+
 const ADMIN_TG_ID = 8869320234
 const API = 'https://varminiapp.popserver.shop/api'
 
@@ -159,7 +175,7 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'wallet' | 'discount' | 'settings' | 'users'>('orders')
+  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'wallet' | 'topups' | 'discount' | 'settings' | 'users'>('orders')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
@@ -292,6 +308,19 @@ export default function AdminDashboard() {
   const [deletingDiscount, setDeletingDiscount] = useState<Discount | null>(null)
   const [discountDeleteLoading, setDiscountDeleteLoading] = useState(false)
   const [discountDeleteError, setDiscountDeleteError] = useState('')
+
+  // ─── Wallet Topups state ───
+  const [topups, setTopups] = useState<WalletTopup[]>([])
+  const [topupsLoading, setTopupsLoading] = useState(false)
+  const [topupsError, setTopupsError] = useState('')
+  const [topupsStatusFilter, setTopupsStatusFilter] = useState<'pending' | 'approved' | 'rejected' | 'all'>('pending')
+  const [topupsPendingCount, setTopupsPendingCount] = useState(0)
+  const [topupActionLoading, setTopupActionLoading] = useState<Record<number, boolean>>({})
+
+  const [rejectTopup, setRejectTopup] = useState<WalletTopup | null>(null)
+  const [rejectTopupReason, setRejectTopupReason] = useState('')
+  const [rejectTopupError, setRejectTopupError] = useState('')
+  const [rejectTopupLoading, setRejectTopupLoading] = useState(false)
 
   const performUserAction = async (
     tgId: number,
@@ -724,6 +753,85 @@ export default function AdminDashboard() {
     }
   }
 
+  const loadTopups = async () => {
+    setTopupsLoading(true)
+    setTopupsError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_wallet_topups&admin_telegram_id=${resolvedId}&status=${topupsStatusFilter}`)
+      const data = await res.json()
+      if (data.ok) {
+        setTopups(data.topups || [])
+        setTopupsPendingCount(Number(data.pending_count) || 0)
+      } else {
+        setTopupsError(data.error || 'خطا در دریافت لیست')
+      }
+    } catch (e: any) {
+      setTopupsError(e?.message || 'خطای شبکه')
+    } finally {
+      setTopupsLoading(false)
+    }
+  }
+
+  const approveTopup = async (id: number) => {
+    setTopupActionLoading((prev) => ({ ...prev, [id]: true }))
+    try {
+      const res = await fetch(`${API}/?action=admin_approve_wallet_topup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_telegram_id: resolvedId, id }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setMessage(`شارژ #${id} تأیید شد`)
+        await loadTopups()
+        setTimeout(() => setMessage(''), 3000)
+      } else {
+        setMessage(data.error || 'خطا در تأیید')
+        setTimeout(() => setMessage(''), 3000)
+      }
+    } catch (e: any) {
+      setMessage(e?.message || 'خطای شبکه')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setTopupActionLoading((prev) => ({ ...prev, [id]: false }))
+    }
+  }
+
+  const submitRejectTopup = async () => {
+    if (!rejectTopup) return
+    if (!rejectTopupReason.trim()) {
+      setRejectTopupError('دلیل رد را وارد کنید')
+      return
+    }
+    setRejectTopupLoading(true)
+    setRejectTopupError('')
+    try {
+      const res = await fetch(`${API}/?action=admin_reject_wallet_topup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          id: rejectTopup.id,
+          reason: rejectTopupReason.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setMessage(`درخواست #${rejectTopup.id} رد شد`)
+        setRejectTopup(null)
+        setRejectTopupReason('')
+        await loadTopups()
+        setTimeout(() => setMessage(''), 3000)
+      } else {
+        setRejectTopupError(data.error || 'خطا در رد')
+      }
+    } catch (e: any) {
+      setRejectTopupError(e?.message || 'خطای شبکه')
+    } finally {
+      setRejectTopupLoading(false)
+    }
+  }
+
   const loadDiscounts = async () => {
     setDiscountsLoading(true)
     setDiscountsError('')
@@ -1066,6 +1174,12 @@ export default function AdminDashboard() {
     loadSettings()
   }, [])
 
+  useEffect(() => {
+    if (tab === 'topups') {
+      loadTopups()
+    }
+  }, [topupsStatusFilter])
+
   if (checking) {
     return (
       <div className="min-h-screen app-bg flex items-center justify-center p-4">
@@ -1141,6 +1255,17 @@ export default function AdminDashboard() {
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'wallet' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             کیف پول
+          </button>
+          <button
+            onClick={() => { setTab('topups'); loadTopups() }}
+            className={`relative px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'topups' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            شارژها
+            {topupsPendingCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-warning-500 text-white text-xs font-bold border-2 border-navy-900">
+                {topupsPendingCount}
+              </span>
+            )}
           </button>
           <button
             onClick={() => { setTab('discount'); loadDiscounts() }}
@@ -1642,6 +1767,108 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ─── Wallet Topups Tab ─── */}
+        {tab === 'topups' && (
+          <>
+            {/* Filter tabs + refresh */}
+            <div className="flex gap-2 mb-5 flex-wrap">
+              <button
+                onClick={loadTopups}
+                className="px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300"
+              >
+                بروزرسانی
+              </button>
+              {(['pending', 'approved', 'rejected', 'all'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => { setTopupsStatusFilter(s); }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 ${topupsStatusFilter === s ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400 hover:text-gray-200'}`}
+                >
+                  {s === 'pending' ? 'در انتظار' : s === 'approved' ? 'تأیید شده' : s === 'rejected' ? 'رد شده' : 'همه'}
+                </button>
+              ))}
+            </div>
+
+            {topupsError && (
+              <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                {topupsError}
+              </div>
+            )}
+
+            {topupsLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="relative inline-flex">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary-500/20"></div>
+                  <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                </div>
+              </div>
+            ) : topups.length === 0 ? (
+              <div className="glass-card rounded-2xl p-8 text-center text-gray-400">
+                درخواستی در این وضعیت وجود ندارد.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {topups.map((t) => {
+                  const statusNorm = t.status
+                  const isLoading = !!topupActionLoading[t.id]
+                  const isPending = statusNorm === 'pending'
+                  const isApproved = statusNorm === 'approved'
+                  const isRejected = statusNorm === 'rejected'
+
+                  return (
+                    <div key={t.id} className={`glass-card rounded-2xl p-4 ${!isPending ? 'opacity-70' : ''}`}>
+                      <div className="flex justify-between gap-2 mb-3">
+                        <div className="font-bold text-white">#{t.id}</div>
+                        <div className={`text-xs px-2.5 py-0.5 rounded-lg border ${
+                          isPending ? 'text-warning-400 bg-warning-500/10 border-warning-500/20' :
+                          isApproved ? 'text-success-400 bg-success-500/10 border-success-500/20' :
+                          'text-error-400 bg-error-500/10 border-error-500/20'
+                        }`}>
+                          {isPending ? 'در انتظار' : isApproved ? 'تأیید شده' : 'رد شده'}
+                        </div>
+                      </div>
+
+                      <div className="text-sm text-gray-300 space-y-1.5">
+                        <div>مبلغ: <span className="text-primary-400 font-bold" dir="ltr">{Number(t.amount).toLocaleString('fa-IR')} تومان</span></div>
+                        <div>کد پیگیری: <span className="font-mono text-white" dir="ltr">{t.reference_number}</span></div>
+                        <div>
+                          کاربر: {t.first_name || '—'} {t.username ? `@${t.username}` : ''}{' '}
+                          <span className="font-mono text-xs text-gray-400" dir="ltr">({t.telegram_id})</span>
+                        </div>
+                        <div className="text-gray-500 text-xs">{t.created_at}</div>
+                        {isRejected && t.reject_reason && (
+                          <div className="mt-2 p-2 rounded-lg bg-error-500/10 border border-error-500/20 text-error-300 text-xs">
+                            دلیل رد: {t.reject_reason}
+                          </div>
+                        )}
+                      </div>
+
+                      {isPending && (
+                        <div className="flex gap-2 mt-4">
+                          <button
+                            onClick={() => approveTopup(t.id)}
+                            disabled={isLoading}
+                            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-success-500 to-success-600 text-sm font-semibold text-white hover:from-success-400 hover:to-success-500 transition-all duration-300 shadow-lg shadow-success-500/20 disabled:opacity-50"
+                          >
+                            {isLoading ? 'در حال...' : '✅ تأیید شارژ'}
+                          </button>
+                          <button
+                            onClick={() => { setRejectTopup(t); setRejectTopupReason(''); setRejectTopupError('') }}
+                            disabled={isLoading}
+                            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold text-white hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
+                          >
+                            ❌ رد
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </>
@@ -2374,6 +2601,52 @@ export default function AdminDashboard() {
                   className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold hover:from-error-400 hover:to-error-500 transition-all duration-300 shadow-lg shadow-error-500/20 disabled:opacity-50"
                 >
                   {rejecting ? 'در حال رد...' : 'تأیید رد'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reject Wallet Topup Modal */}
+        {rejectTopup && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="glass-card rounded-2xl p-6 w-full max-w-md">
+              <h3 className="text-lg font-bold text-white mb-1">
+                رد درخواست #{rejectTopup.id}
+              </h3>
+              <p className="text-sm text-gray-400 mb-4">
+                مبلغ {Number(rejectTopup.amount).toLocaleString('fa-IR')} تومان — کد پیگیری {rejectTopup.reference_number}
+              </p>
+
+              <textarea
+                value={rejectTopupReason}
+                onChange={(e) => setRejectTopupReason(e.target.value)}
+                className="w-full px-4 py-3 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm focus:outline-none focus:ring-2 focus:ring-error-500/40 resize-none"
+                rows={3}
+                placeholder="مثال: رسید نامعتبر، مبلغ واریز نشده..."
+                autoFocus
+              />
+
+              {rejectTopupError && (
+                <div className="mt-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                  {rejectTopupError}
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-5">
+                <button
+                  onClick={() => { setRejectTopup(null); setRejectTopupReason(''); setRejectTopupError('') }}
+                  disabled={rejectTopupLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm font-semibold text-gray-300 disabled:opacity-50"
+                >
+                  انصراف
+                </button>
+                <button
+                  onClick={submitRejectTopup}
+                  disabled={rejectTopupLoading}
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-error-500 to-error-600 text-sm font-semibold text-white disabled:opacity-50"
+                >
+                  {rejectTopupLoading ? 'در حال رد...' : 'تأیید رد'}
                 </button>
               </div>
             </div>

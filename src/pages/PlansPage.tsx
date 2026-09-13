@@ -41,6 +41,14 @@ export default function PlansPage() {
   } | null>(null)
   const [discountError, setDiscountError] = useState('')
 
+  // ─── پرداخت با کیف پول ───
+  const [walletBalance, setWalletBalance] = useState<number | null>(null)
+  const [walletBalanceLoading, setWalletBalanceLoading] = useState(false)
+  const [payMode, setPayMode] = useState<'card' | 'wallet'>('card')
+  const [walletSubmitting, setWalletSubmitting] = useState(false)
+  const [walletError, setWalletError] = useState('')
+  const [walletSuccess, setWalletSuccess] = useState(false)
+
   // جلوگیری از ثبت تکراری
   const submittingRef = useRef(false)
   const [purchaseAttemptKey, setPurchaseAttemptKey] = useState('')
@@ -121,12 +129,62 @@ export default function PlansPage() {
         setSuccessMessage(null)
         setRefNumber('')
         setPurchaseAttemptKey('')
+        setPayMode('card')
+        setWalletError('')
+        setWalletSuccess(false)
+        setWalletBalance(null)
       }, 3000)
     } catch (e: any) {
       setFormError('خطا در ثبت سفارش: ' + (e?.response?.data?.error || e.message))
     } finally {
       setSubmitting(false)
       submittingRef.current = false
+    }
+  }
+
+  const handleWalletPurchase = async () => {
+    if (!selectedPlan) return
+    if (walletSubmitting) return
+
+    const telegramId = Number(user?.telegram_id) ||
+      Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0
+    if (!telegramId) {
+      setWalletError('هویت تلگرام شناسایی نشد')
+      return
+    }
+
+    const amount = discountInfo?.amount_after || selectedPlan.price_amount || 0
+    if (walletBalance !== null && walletBalance < amount) {
+      setWalletError(`موجودی کافی نیست. موجودی فعلی: ${walletBalance.toLocaleString('fa-IR')} تومان — کمبود: ${(amount - walletBalance).toLocaleString('fa-IR')} تومان`)
+      return
+    }
+
+    setWalletSubmitting(true)
+    setWalletError('')
+    try {
+      const res = await fetch('https://varminiapp.popserver.shop/api/?action=create_order_wallet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan_code: selectedPlan.plan_code,
+          telegram_id: telegramId,
+          discount_code: discountInfo?.code || null,
+          idempotency_key: `ui-wallet-${Date.now()}-${telegramId}`,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setWalletSuccess(true)
+        setTimeout(() => {
+          closePurchaseModal()
+        }, 5000)
+      } else {
+        setWalletError(data.error || 'خطا در خرید')
+      }
+    } catch (e: any) {
+      setWalletError(e?.message || 'خطای شبکه')
+    } finally {
+      setWalletSubmitting(false)
     }
   }
 
@@ -199,6 +257,20 @@ export default function PlansPage() {
     setDiscountInfo(null)
     setDiscountError('')
     setPurchaseAttemptKey(`ui-order-${Date.now()}-${tgId}`)
+    // ریست حالت پرداخت کیف پول
+    setPayMode('card')
+    setWalletError('')
+    setWalletSuccess(false)
+    setWalletBalance(null)
+    // دریافت موجودی کیف پول
+    if (tgId) {
+      setWalletBalanceLoading(true)
+      fetch(`https://varminiapp.popserver.shop/api/?action=my_wallet&telegram_id=${tgId}`)
+        .then(r => r.json())
+        .then(d => { if (d?.ok) setWalletBalance(Number(d.balance) || 0) })
+        .catch(() => setWalletBalance(null))
+        .finally(() => setWalletBalanceLoading(false))
+    }
   }
 
   // بستن مودال با پاک کردن همه چیز
@@ -210,6 +282,10 @@ export default function PlansPage() {
     setRefNumber('')
     setFormError('')
     setPurchaseAttemptKey('')
+    setPayMode('card')
+    setWalletError('')
+    setWalletSuccess(false)
+    setWalletBalance(null)
   }
 
   if (loading) {
@@ -286,6 +362,14 @@ export default function PlansPage() {
                     </svg>
                     {successMessage}
                   </div>
+                ) : walletSuccess ? (
+                  <div className="p-5 bg-success-500/10 border border-success-500/30 text-success-300 rounded-xl text-center">
+                    <svg className="w-12 h-12 mx-auto mb-3 text-success-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="font-bold">🎉 سرویس شما فعال شد!</p>
+                    <p className="text-xs mt-2 text-gray-400">اطلاعات اتصال به تلگرام ارسال شد.</p>
+                  </div>
                 ) : (
                   <>
                     <div className="mb-6 space-y-2.5 text-sm text-gray-300">
@@ -321,25 +405,48 @@ export default function PlansPage() {
                       )}
                     </div>
 
-                    <div className="mb-6 bg-navy-900/60 p-4 rounded-xl border border-warning-500/20 text-xs text-gray-300 space-y-2">
-                      <p className="font-semibold text-warning-400 flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-                        </svg>
-                        اطلاعات کارت به کارت:
-                      </p>
-                      <p>
-                        شماره کارت:{' '}
-                        <span className="font-mono text-white">
-                          {settings.card_number || 'در حال بارگذاری...'}
-                        </span>
-                      </p>
-                      <p>
-                        به نام:{' '}
-                        <span className="text-white">
-                          {settings.card_holder_name || 'در حال بارگذاری...'}
-                        </span>
-                      </p>
+                    {payMode === 'card' && (
+                      <div className="mb-6 bg-navy-900/60 p-4 rounded-xl border border-warning-500/20 text-xs text-gray-300 space-y-2">
+                        <p className="font-semibold text-warning-400 flex items-center gap-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                          </svg>
+                          اطلاعات کارت به کارت:
+                        </p>
+                        <p>
+                          شماره کارت:{' '}
+                          <span className="font-mono text-white">
+                            {settings.card_number || 'در حال بارگذاری...'}
+                          </span>
+                        </p>
+                        <p>
+                          به نام:{' '}
+                          <span className="text-white">
+                            {settings.card_holder_name || 'در حال بارگذاری...'}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+
+                    {/* انتخاب روش پرداخت */}
+                    <div className="mb-6">
+                      <label className="block text-sm text-gray-300 mb-2">روش پرداخت</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setPayMode('card'); setWalletError('') }}
+                          className={`py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${payMode === 'card' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400'}`}
+                        >
+                          💳 کارت‌به‌کارت
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setPayMode('wallet'); setWalletError('') }}
+                          className={`py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${payMode === 'wallet' ? 'bg-gradient-to-r from-success-500 to-success-600 text-white glow-primary' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400'}`}
+                        >
+                          💰 کیف پول
+                        </button>
+                      </div>
                     </div>
 
                     {/* کد تخفیف */}
@@ -392,45 +499,104 @@ export default function PlansPage() {
                       )}
                     </div>
 
-                    <div className="mb-2">
-                      <Input
-                        label="شماره پیگیری / ارجاع کارت به کارت"
-                        placeholder="مثلاً: 12345678"
-                        value={refNumber}
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        aria-invalid={Boolean(formError)}
-                        onChange={e => {
-                          setRefNumber(normalizeReferenceNumber(e.target.value))
-                          setFormError('')
-                        }}
-                      />
-                      {formError && (
-                        <p className="mt-2 text-sm text-error-400" role="alert">
-                          {formError}
-                        </p>
-                      )}
-                    </div>
+                    {payMode === 'card' && (
+                      <div className="mb-2">
+                        <Input
+                          label="شماره پیگیری / ارجاع کارت به کارت"
+                          placeholder="مثلاً: 12345678"
+                          value={refNumber}
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          aria-invalid={Boolean(formError)}
+                          onChange={e => {
+                            setRefNumber(normalizeReferenceNumber(e.target.value))
+                            setFormError('')
+                          }}
+                        />
+                        {formError && (
+                          <p className="mt-2 text-sm text-error-400" role="alert">
+                            {formError}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {payMode === 'wallet' && (
+                      <>
+                        <div className="mb-5 p-4 rounded-xl bg-navy-900/40 border border-navy-700/30 space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">موجودی فعلی کیف پول</span>
+                            <span className="text-white font-bold">
+                              {walletBalanceLoading ? '...' : (walletBalance !== null ? walletBalance.toLocaleString('fa-IR') + ' تومان' : '—')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-400">مبلغ قابل پرداخت</span>
+                            <span className="text-primary-400 font-bold">
+                              {(discountInfo?.amount_after || selectedPlan.price_amount || 0).toLocaleString('fa-IR')} تومان
+                            </span>
+                          </div>
+                          <div className="flex justify-between pt-2 border-t border-navy-700/30">
+                            <span className="text-gray-400">موجودی بعد از خرید</span>
+                            <span className={`font-bold ${
+                              walletBalance !== null && walletBalance >= (discountInfo?.amount_after || selectedPlan.price_amount || 0)
+                                ? 'text-success-400'
+                                : 'text-error-400'
+                            }`}>
+                              {walletBalance !== null
+                                ? Math.max(0, walletBalance - (discountInfo?.amount_after || selectedPlan.price_amount || 0)).toLocaleString('fa-IR') + ' تومان'
+                                : '—'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {walletBalance !== null && walletBalance < (discountInfo?.amount_after || selectedPlan.price_amount || 0) && (
+                          <div className="mb-5 p-3 rounded-xl bg-warning-500/10 border border-warning-500/30 text-warning-300 text-sm">
+                            ⚠️ موجودی کافی نیست. لطفاً از پروفایل، کیف پول رو شارژ کنید.
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {walletError && (
+                      <div className="mb-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                        {walletError}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
 
-              {!successMessage && (
+              {!successMessage && !walletSuccess && (
                 <div className="flex-shrink-0 p-4 border-t border-navy-700/40 flex gap-3 justify-end bg-navy-900/40">
                   <Button
                     variant="ghost"
                     onClick={closePurchaseModal}
-                    disabled={submitting}
+                    disabled={submitting || walletSubmitting}
                   >
                     انصراف
                   </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handlePurchase}
-                    loading={submitting}
-                  >
-                    ثبت و تأیید پرداخت
-                  </Button>
+                  {payMode === 'card' ? (
+                    <Button
+                      variant="primary"
+                      onClick={handlePurchase}
+                      loading={submitting}
+                    >
+                      ثبت و تأیید پرداخت
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="primary"
+                      onClick={handleWalletPurchase}
+                      loading={walletSubmitting}
+                      disabled={
+                        walletBalance === null ||
+                        walletBalance < (discountInfo?.amount_after || selectedPlan.price_amount || 0)
+                      }
+                    >
+                      💰 پرداخت از کیف پول
+                    </Button>
+                  )}
                 </div>
               )}
             </Card>
