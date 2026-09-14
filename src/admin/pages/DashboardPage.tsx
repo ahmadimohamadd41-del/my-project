@@ -31,6 +31,7 @@ type AdminUser = {
   first_name?: string
   last_name?: string
   username?: string
+  is_partner?: boolean
   subscription?: {
     id?: number
     plan_name?: string
@@ -52,6 +53,7 @@ type AdminPlan = {
   quota_gb: number
   duration_days: number
   price_amount: string | number
+  partner_price?: string | number | null
   price_currency: string
   is_active: number
 }
@@ -96,6 +98,7 @@ type Discount = {
   starts_at: string | null
   expires_at: string | null
   is_active: number
+  for_partner_only?: number
   note?: string
   created_at: string
 }
@@ -213,6 +216,13 @@ export default function AdminDashboard() {
   const [planActionLoading, setPlanActionLoading] = useState<Record<string, boolean>>({})
   const [planMessage, setPlanMessage] = useState<Record<string, { type: 'ok' | 'error'; text: string } | null>>({})
 
+  // ─── Partner state ───
+  // برای تیک همکار روی کاربران
+  const [partnerLoading, setPartnerLoading] = useState<Record<number, boolean>>({})
+  // برای input قیمت همکار روی پلن‌ها
+  const [partnerPriceInputs, setPartnerPriceInputs] = useState<Record<string, string | number>>({})
+  const [partnerPriceLoading, setPartnerPriceLoading] = useState<Record<string, boolean>>({})
+
   // ─── Create Plan state ───
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [createForm, setCreateForm] = useState({
@@ -281,6 +291,7 @@ export default function AdminDashboard() {
     starts_at: '',
     expires_at: '',
     note: '',
+    for_partner_only: 0,
   })
   const [discountCreating, setDiscountCreating] = useState(false)
   const [discountCreateError, setDiscountCreateError] = useState('')
@@ -300,6 +311,7 @@ export default function AdminDashboard() {
     starts_at: '',
     expires_at: '',
     note: '',
+    for_partner_only: 0,
   })
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
@@ -350,6 +362,35 @@ export default function AdminDashboard() {
       setUserActionMessage((prev) => ({ ...prev, [tgId]: { type: 'error', text: e?.message || 'خطای شبکه' } }))
     } finally {
       setActionLoading((prev) => ({ ...prev, [tgId]: null }))
+    }
+  }
+
+  const togglePartner = async (telegramId: number, current: boolean) => {
+    setPartnerLoading((prev) => ({ ...prev, [telegramId]: true }))
+    try {
+      const res = await fetch(`${API}/?action=admin_set_partner`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          telegram_id: telegramId,
+          is_partner: current ? 0 : 1,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setMessage(current ? 'وضعیت همکاری غیرفعال شد' : 'کاربر به عنوان همکار فعال شد')
+        await loadUsers()
+        setTimeout(() => setMessage(''), 3000)
+      } else {
+        setMessage(data.error || 'خطا در تغییر وضعیت')
+        setTimeout(() => setMessage(''), 3000)
+      }
+    } catch (e: any) {
+      setMessage(e?.message || 'خطای شبکه')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setPartnerLoading((prev) => ({ ...prev, [telegramId]: false }))
     }
   }
 
@@ -452,6 +493,42 @@ export default function AdminDashboard() {
       setPlanMessage((prev) => ({ ...prev, [planId]: { type: 'error', text: e?.message || 'خطای شبکه' } }))
     } finally {
       setPlanActionLoading((prev) => ({ ...prev, [planId]: false }))
+    }
+  }
+
+  const savePartnerPrice = async (planId: string) => {
+    const val = partnerPriceInputs[planId]
+
+    setPartnerPriceLoading((prev) => ({ ...prev, [planId]: true }))
+    try {
+      const res = await fetch(`${API}/?action=admin_set_partner_price`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          admin_telegram_id: resolvedId,
+          plan_id: planId,
+          partner_price: val === '' || val === undefined ? null : Number(val),
+        }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setMessage(val === '' ? 'قیمت همکار پاک شد' : 'قیمت همکار ذخیره شد')
+        setPartnerPriceInputs((prev) => {
+          const next = { ...prev }
+          delete next[planId]
+          return next
+        })
+        await loadPlans()
+        setTimeout(() => setMessage(''), 3000)
+      } else {
+        setMessage(data.error || 'خطا در ذخیره')
+        setTimeout(() => setMessage(''), 3000)
+      }
+    } catch (e: any) {
+      setMessage(e?.message || 'خطای شبکه')
+      setTimeout(() => setMessage(''), 3000)
+    } finally {
+      setPartnerPriceLoading((prev) => ({ ...prev, [planId]: false }))
     }
   }
 
@@ -882,6 +959,7 @@ export default function AdminDashboard() {
           starts_at: discountForm.starts_at || null,
           expires_at: discountForm.expires_at || null,
           note: discountForm.note.trim() || null,
+          for_partner_only: discountForm.for_partner_only,
         }),
       })
       const data = await res.json()
@@ -896,6 +974,7 @@ export default function AdminDashboard() {
           starts_at: '',
           expires_at: '',
           note: '',
+          for_partner_only: 0,
         })
         setMessage('کد تخفیف ساخته شد')
         await loadDiscounts()
@@ -967,6 +1046,7 @@ export default function AdminDashboard() {
         ? discount.expires_at.replace(' ', 'T').slice(0, 16)
         : '',
       note: discount.note || '',
+      for_partner_only: discount.for_partner_only ?? 0,
     })
     setEditError('')
   }
@@ -1008,6 +1088,7 @@ export default function AdminDashboard() {
           starts_at: editForm.starts_at || null,
           expires_at: editForm.expires_at || null,
           note: editForm.note.trim() || null,
+          for_partner_only: editForm.for_partner_only,
         }),
       })
       const data = await res.json()
@@ -1456,6 +1537,46 @@ export default function AdminDashboard() {
                         <p className="text-xs text-gray-500 mt-1">
                           فعلی: {currentPrice.toLocaleString('fa-IR')} تومان
                         </p>
+                      </div>
+
+                      <div className="mb-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                        <label className="block text-xs text-amber-300 mb-1.5 font-semibold">
+                          🤝 قیمت همکار (اختیاری)
+                        </label>
+                        <input
+                          type="number"
+                          value={partnerPriceInputs[p.id] !== undefined
+                            ? partnerPriceInputs[p.id]
+                            : (p.partner_price ?? '')}
+                          onChange={(e) => {
+                            const val = e.target.value
+                            setPartnerPriceInputs((prev) => ({
+                              ...prev,
+                              [p.id]: val === '' ? '' : Number(val),
+                            }))
+                          }}
+                          className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-amber-500/30 text-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/40 font-mono"
+                          placeholder="مثلاً 120000 — خالی = بدون تخفیف همکار"
+                          dir="ltr"
+                          min={0}
+                          step={1000}
+                        />
+                        <div className="flex justify-between items-center mt-2">
+                          <p className="text-xs text-gray-500">
+                            {p.partner_price
+                              ? `فعلی: ${Number(p.partner_price).toLocaleString('fa-IR')} تومان`
+                              : 'تنظیم نشده (همکاران قیمت عادی می‌بینند)'}
+                          </p>
+                          {partnerPriceInputs[p.id] !== undefined && (
+                            <button
+                              onClick={() => savePartnerPrice(p.id)}
+                              disabled={!!partnerPriceLoading[p.id]}
+                              className="text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold hover:from-amber-400 hover:to-orange-400 transition disabled:opacity-50"
+                            >
+                              {partnerPriceLoading[p.id] ? '...' : 'ذخیره'}
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       <label className="flex items-center gap-3 text-sm cursor-pointer mb-4">
@@ -1916,7 +2037,11 @@ export default function AdminDashboard() {
                   return (
                     <div key={d.id} className={`glass-card glass-card-hover rounded-2xl p-4 ${!isActive ? 'opacity-60' : ''}`}>
                       <div className="flex justify-between gap-2 mb-3">
-                        <div className="font-mono font-bold text-white text-lg" dir="ltr">{d.code}</div>
+                        <div className="font-mono font-bold text-white text-lg" dir="ltr">{d.code}{d.for_partner_only === 1 && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold mr-2">
+                            🤝 همکار
+                          </span>
+                        )}</div>
                         <div className={`text-xs px-2.5 py-0.5 rounded-lg border ${isActive ? 'text-success-400 bg-success-500/10 border-success-500/20' : 'text-gray-500 bg-navy-800/60 border-navy-700/40'}`}>
                           {isActive ? 'فعال' : 'غیرفعال'}
                         </div>
@@ -2020,9 +2145,16 @@ export default function AdminDashboard() {
                   return (
                     <div key={u.telegram_id} className="glass-card glass-card-hover rounded-2xl p-4">
                       <div className="flex justify-between gap-2 mb-3">
-                        <div className="font-bold text-white">
-                          {u.first_name || '—'} {u.last_name || ''}
-                          {u.username ? ` @${u.username}` : ''}
+                        <div className="font-bold text-white flex items-center gap-2 flex-wrap">
+                          <span>
+                            {u.first_name || '—'} {u.last_name || ''}
+                            {u.username ? ` @${u.username}` : ''}
+                          </span>
+                          {u.is_partner && (
+                            <span className="text-xs px-2 py-0.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                              🤝 همکار
+                            </span>
+                          )}
                         </div>
                         <div className="font-mono text-xs text-gray-400" dir="ltr">
                           {u.telegram_id}
@@ -2087,6 +2219,22 @@ export default function AdminDashboard() {
                           </span>
                         </div>
                       </div>
+
+                      <button
+                        onClick={() => togglePartner(u.telegram_id, !!u.is_partner)}
+                        disabled={!!partnerLoading[u.telegram_id]}
+                        className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 disabled:opacity-50 ${
+                          u.is_partner
+                            ? 'bg-navy-800/60 border border-navy-700/40 text-gray-300 hover:border-error-500/30 mb-2'
+                            : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-400 hover:to-orange-400 shadow-lg shadow-amber-500/20 mb-2'
+                        }`}
+                      >
+                        {partnerLoading[u.telegram_id]
+                          ? 'در حال تغییر...'
+                          : u.is_partner
+                            ? '❌ لغو وضعیت همکاری'
+                            : '🤝 فعال‌سازی همکار'}
+                      </button>
 
                       {sub?.id && (
                         <>
@@ -2316,6 +2464,21 @@ export default function AdminDashboard() {
                   />
                 </div>
 
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={discountForm.for_partner_only === 1}
+                    onChange={(e) => setDiscountForm({ ...discountForm, for_partner_only: e.target.checked ? 1 : 0 })}
+                    className="w-4 h-4 rounded accent-amber-500"
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-amber-300">🤝 فقط برای همکاران</div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      اگه تیک بخوره، فقط کاربرانی که is_partner=1 دارن می‌تونن از این کد استفاده کنن
+                    </div>
+                  </div>
+                </label>
+
                 {discountCreateError && (
                   <div className="p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
                     {discountCreateError}
@@ -2440,6 +2603,21 @@ export default function AdminDashboard() {
                     rows={2}
                   />
                 </div>
+
+                <label className="flex items-center gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.for_partner_only === 1}
+                    onChange={(e) => setEditForm({ ...editForm, for_partner_only: e.target.checked ? 1 : 0 })}
+                    className="w-4 h-4 rounded accent-amber-500"
+                  />
+                  <div>
+                    <div className="text-sm font-semibold text-amber-300">🤝 فقط برای همکاران</div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      اگه تیک بخوره، فقط کاربرانی که is_partner=1 دارن می‌تونن از این کد استفاده کنن
+                    </div>
+                  </div>
+                </label>
 
                 {editError && (
                   <div className="p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">

@@ -7,6 +7,7 @@ export interface AuthUser {
   last_name?: string
   username?: string
   is_admin: boolean
+  is_partner?: boolean
 }
 
 interface AuthContextType {

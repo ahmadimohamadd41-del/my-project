@@ -8,6 +8,8 @@ export interface VPSPlan {
   quota_bytes: number
   duration_seconds: number
   price_amount: number
+  original_price?: number
+  is_partner_price?: boolean
   price_currency: string
   plan_status: string
 }
@@ -47,10 +49,11 @@ export const plansApi = {
    * ✅ FIX: Plans now come from cPanel (not VPS)
    * تا وقتی ادمین قیمت یا وضعیت پلن را تغییر می‌دهد، فروشگاه فوری آپدیت شود
    */
-  getAll: async (): Promise<VPSPlan[]> => {
+  getAll: async (telegramId?: number): Promise<VPSPlan[]> => {
     try {
       // cache-busting با timestamp
-      const response = await cpanelApi.get(`?action=plans&_=${Date.now()}`)
+      const tgParam = telegramId ? `&telegram_id=${telegramId}` : ''
+      const response = await cpanelApi.get(`?action=plans&_=${Date.now()}${tgParam}`)
       const cpanelPlans = response.data?.plans || []
 
       // Map cPanel format → VPSPlan
@@ -61,6 +64,8 @@ export const plansApi = {
         quota_bytes: (Number(p.quota_gb) || 0) * 1024 * 1024 * 1024,
         duration_seconds: (Number(p.duration_days) || 30) * 86400,
         price_amount: Number(p.price_amount) || 0,
+        original_price: Number(p.original_price) || Number(p.price_amount) || 0,
+        is_partner_price: Boolean(p.is_partner_price),
         price_currency: p.price_currency || 'IRR',
         plan_status: Number(p.is_active) === 1 ? 'active' : 'inactive',
       }))

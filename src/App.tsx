@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from '@/hooks/useAuth'
 import HomePage from '@/pages/HomePage'
 import PlansPage from '@/pages/PlansPage'
 import AccountPage from '@/pages/AccountPage'
+import MyAccountsPage from '@/pages/MyAccountsPage'
 import AdminDashboard from '@/admin/pages/DashboardPage'
 import LoginPage from '@/pages/LoginPage'
 import SupportPage from '@/pages/SupportPage'
@@ -35,6 +36,7 @@ function AppRoutes() {
           </RequireAuth>
         }
       />
+      <Route path="/my-accounts" element={<MyAccountsPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/support" element={<SupportPage />} />
       {/* قفل ادمین داخل DashboardPage است (تلگرام + telegram_id) */}

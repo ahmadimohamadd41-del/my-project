@@ -72,8 +72,11 @@ export default function PlansPage() {
     const init = async () => {
       setLoading(true)
       try {
+        const tgId = Number(user?.telegram_id) ||
+          Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0
+
         const [plansData] = await Promise.all([
-          plansApi.getAll(),
+          plansApi.getAll(tgId || undefined),
           loadSettings(),
         ])
         setPlans(plansData)
@@ -331,6 +334,16 @@ export default function PlansPage() {
                   </span>
                   <span className="text-gray-400 mr-2 text-sm">تومان</span>
                 </div>
+                {plan.is_partner_price && (
+                  <div className="text-center mt-2">
+                    <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                      🤝 قیمت همکار
+                    </span>
+                    <p className="text-xs text-gray-500 mt-1 line-through" dir="ltr">
+                      {Number(plan.original_price || 0).toLocaleString('fa-IR')}
+                    </p>
+                  </div>
+                )}
                 <p className="text-center text-gray-500 text-sm mt-2">
                   مدت: {Math.round((plan.duration_seconds || 2592000) / 86400)} روز
                 </p>
@@ -379,10 +392,30 @@ export default function PlansPage() {
                       </div>
 
                       {discountInfo === null ? (
-                        <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
-                          <span>مبلغ قابل پرداخت:</span>
-                          <span className="font-bold text-primary-400">{selectedPlan.price_amount?.toLocaleString()} تومان</span>
-                        </div>
+                        <>
+                          {selectedPlan.is_partner_price && (
+                            <>
+                              <div className="flex justify-between p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                                <span className="text-amber-300 text-sm">🤝 قیمت همکاری</span>
+                                <span className="text-amber-300 font-bold text-sm">
+                                  {Number(selectedPlan.price_amount).toLocaleString('fa-IR')} تومان
+                                </span>
+                              </div>
+                              <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
+                                <span className="text-gray-500 text-xs line-through">قیمت عادی</span>
+                                <span className="text-gray-500 text-xs line-through" dir="ltr">
+                                  {Number(selectedPlan.original_price || 0).toLocaleString('fa-IR')} تومان
+                                </span>
+                              </div>
+                            </>
+                          )}
+                          <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">
+                            <span>مبلغ قابل پرداخت:</span>
+                            <span className="font-bold text-primary-400">
+                              {Number(selectedPlan.price_amount).toLocaleString('fa-IR')} تومان
+                            </span>
+                          </div>
+                        </>
                       ) : (
                         <>
                           <div className="flex justify-between p-2.5 rounded-lg bg-navy-900/40">

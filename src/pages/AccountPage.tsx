@@ -221,6 +221,45 @@ export default function AccountPage() {
           <h1 className="text-xl font-bold text-white">اطلاعات حساب</h1>
         </header>
 
+        {/* ─── کارت اطلاع‌رسانی تلگرام ─── */}
+        <div className="mb-4 p-4 rounded-2xl bg-navy-800/40 border border-primary-500/20 flex items-start gap-3">
+          <div className="text-2xl flex-shrink-0">📢</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-white text-sm font-semibold mb-1">
+              اطلاع‌رسانی تلگرام
+            </div>
+            <div className="text-gray-400 text-xs leading-relaxed mb-3">
+              برای دریافت اطلاع‌رسانی‌ها (شارژ، تأیید سفارش، پاسخ تیکت)،
+              مطمئن شوید چت بات تلگرام در دسترس شماست.
+            </div>
+            <a
+              href="https://t.me/Var_vpn_sales_bot?start=start"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary-500 to-primary-600 text-white text-xs font-bold hover:from-primary-400 hover:to-primary-500 transition-all duration-300"
+            >
+              📱 باز کردن بات تلگرام
+            </a>
+          </div>
+        </div>
+
+        {user?.is_partner && (
+          <Link to="/my-accounts" className="block mb-4">
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30 hover:border-amber-500/50 transition-all duration-300 cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="text-2xl">🤝</div>
+                <div className="flex-1">
+                  <div className="text-amber-300 text-sm font-bold">اکانت‌های من</div>
+                  <div className="text-gray-400 text-xs mt-0.5">
+                    لیست اکانت‌های خریده‌شده، یوزر، پسورد، حجم و دانلود
+                  </div>
+                </div>
+                <div className="text-amber-400 text-xl">←</div>
+              </div>
+            </div>
+          </Link>
+        )}
+
         {user && (
           <Card className="mb-6 p-6 animate-slide-up">
             <div className="flex items-center gap-4 mb-5">
