@@ -1,6 +1,31 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+} from 'chart.js'
+import { Line, Bar } from 'react-chartjs-2'
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+)
 
 type Order = {
   id: number
@@ -133,6 +158,67 @@ type WalletTopup = {
   username?: string
 }
 
+type StatsOverview = {
+  sales_today: number
+  sales_week: number
+  sales_month: number
+  sales_total: number
+  users_today: number
+  users_week: number
+  users_month: number
+  users_total: number
+  partner_count: number
+  pending_orders: number
+  active_subscriptions: number
+  wallet_charged: number
+  wallet_spent: number
+  wallet_balance: number
+  pending_topups: number
+  open_tickets: number
+}
+
+type StatsChartDay = {
+  day: string
+  orders: number
+  sales: number
+  new_users: number
+}
+
+type StatsPlan = {
+  plan_name: string
+  plan_code: string
+  orders: number
+  sales: number
+}
+
+type StatsPartner = {
+  telegram_id: number
+  first_name: string
+  username?: string | null
+  orders: number
+  sales: number
+}
+
+type StatsWalletType = {
+  type: string
+  cnt: number
+  total: number
+}
+
+type StatsWallet = {
+  summary: {
+    net: number
+    total_in: number
+    total_out: number
+    txn_count: number
+    pending_topups: number
+    approved_topups_count: number
+    approved_topups_total: number
+  }
+  types: StatsWalletType[]
+  daily: Array<{day: string, charged: number, spent: number}>
+}
+
 const ADMIN_TG_ID = 8869320234
 const API = 'https://varminiapp.popserver.shop/api'
 
@@ -178,7 +264,7 @@ export default function AdminDashboard() {
 
   const checking = authLoading || !tgReady
 
-  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'wallet' | 'topups' | 'discount' | 'settings' | 'users'>('orders')
+  const [tab, setTab] = useState<'orders' | 'plans' | 'tickets' | 'templates' | 'wallet' | 'topups' | 'discount' | 'stats' | 'settings' | 'users'>('orders')
   const [users, setUsers] = useState<AdminUser[]>([])
   const [usersLoading, setUsersLoading] = useState(false)
   const [usersError, setUsersError] = useState('')
@@ -320,6 +406,16 @@ export default function AdminDashboard() {
   const [deletingDiscount, setDeletingDiscount] = useState<Discount | null>(null)
   const [discountDeleteLoading, setDiscountDeleteLoading] = useState(false)
   const [discountDeleteError, setDiscountDeleteError] = useState('')
+
+  // ─── Stats state ───
+  const [statsOverview, setStatsOverview] = useState<StatsOverview | null>(null)
+  const [statsChart, setStatsChart] = useState<StatsChartDay[]>([])
+  const [statsPlans, setStatsPlans] = useState<StatsPlan[]>([])
+  const [statsPartners, setStatsPartners] = useState<StatsPartner[]>([])
+  const [statsWallet, setStatsWallet] = useState<StatsWallet | null>(null)
+  const [statsLoading, setStatsLoading] = useState(false)
+  const [statsError, setStatsError] = useState('')
+  const [statsDays, setStatsDays] = useState<7 | 30 | 90>(30)
 
   // ─── Wallet Topups state ───
   const [topups, setTopups] = useState<WalletTopup[]>([])
@@ -924,6 +1020,43 @@ export default function AdminDashboard() {
     }
   }
 
+  const loadStats = async () => {
+    setStatsLoading(true)
+    setStatsError('')
+    try {
+      const [overviewRes, chartRes, plansRes, partnersRes, walletRes] = await Promise.all([
+        fetch(`${API}/?action=admin_stats_overview&admin_telegram_id=${resolvedId}`),
+        fetch(`${API}/?action=admin_stats_chart&admin_telegram_id=${resolvedId}&days=${statsDays}`),
+        fetch(`${API}/?action=admin_stats_plans&admin_telegram_id=${resolvedId}&days=${statsDays}`),
+        fetch(`${API}/?action=admin_stats_partners&admin_telegram_id=${resolvedId}&days=${statsDays}`),
+        fetch(`${API}/?action=admin_stats_wallet&admin_telegram_id=${resolvedId}`),
+      ])
+      const overviewData = await overviewRes.json()
+      const chartData = await chartRes.json()
+      const plansData = await plansRes.json()
+      const partnersData = await partnersRes.json()
+      const walletData = await walletRes.json()
+
+      if (overviewData.ok) setStatsOverview(overviewData.stats)
+      if (chartData.ok) setStatsChart(chartData.chart || [])
+      if (plansData.ok) setStatsPlans(plansData.plans || [])
+      if (partnersData.ok) setStatsPartners(partnersData.partners || [])
+      if (walletData.ok) setStatsWallet({
+        summary: walletData.summary,
+        types: walletData.types || [],
+        daily: walletData.daily || [],
+      })
+
+      if (!overviewData.ok) {
+        setStatsError(overviewData.error || 'خطا در دریافت آمار')
+      }
+    } catch (e: any) {
+      setStatsError(e?.message || 'خطای شبکه')
+    } finally {
+      setStatsLoading(false)
+    }
+  }
+
   const createDiscount = async () => {
     setDiscountCreating(true)
     setDiscountCreateError('')
@@ -1261,6 +1394,12 @@ export default function AdminDashboard() {
     }
   }, [topupsStatusFilter])
 
+  useEffect(() => {
+    if (tab === 'stats' && statsOverview) {
+      loadStats()
+    }
+  }, [statsDays])
+
   if (checking) {
     return (
       <div className="min-h-screen app-bg flex items-center justify-center p-4">
@@ -1353,6 +1492,12 @@ export default function AdminDashboard() {
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'discount' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
           >
             کد تخفیف
+          </button>
+          <button
+            onClick={() => { setTab('stats'); loadStats() }}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'stats' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
+          >
+            گزارش‌ها
           </button>
           <button
             onClick={() => setTab('settings')}
@@ -2107,6 +2252,357 @@ export default function AdminDashboard() {
                     </div>
                   )
                 })}
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === 'stats' && (
+          <>
+            {/* فیلتر بازه زمانی */}
+            <div className="flex gap-2 mb-5 flex-wrap">
+              <button
+                onClick={loadStats}
+                className="px-4 py-2 rounded-xl bg-navy-800/60 border border-navy-700/40 text-sm hover:border-primary-500/30 transition-all duration-300"
+              >
+                بروزرسانی
+              </button>
+              {([7, 30, 90] as const).map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setStatsDays(d)}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all duration-300 ${statsDays === d ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400 hover:text-gray-200'}`}
+                >
+                  {d} روز
+                </button>
+              ))}
+            </div>
+
+            {statsError && (
+              <div className="mb-4 p-3.5 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                {statsError}
+              </div>
+            )}
+
+            {statsLoading || !statsOverview ? (
+              <div className="flex justify-center py-8">
+                <div className="relative inline-flex">
+                  <div className="w-10 h-10 rounded-full border-2 border-primary-500/20"></div>
+                  <div className="absolute inset-0 w-10 h-10 rounded-full border-t-2 border-primary-500 animate-spin"></div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {/* KPI Cards ردیف اول */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="glass-card rounded-2xl p-4">
+                    <div className="text-xs text-gray-400 mb-1">💰 فروش امروز</div>
+                    <div className="text-lg font-bold text-success-400" dir="ltr">
+                      {Number(statsOverview.sales_today).toLocaleString('fa-IR')}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      هفته: {Number(statsOverview.sales_week).toLocaleString('fa-IR')}
+                    </div>
+                  </div>
+
+                  <div className="glass-card rounded-2xl p-4">
+                    <div className="text-xs text-gray-400 mb-1">👥 کاربر جدید</div>
+                    <div className="text-lg font-bold text-primary-400" dir="ltr">
+                      {Number(statsOverview.users_today).toLocaleString('fa-IR')}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      کل: {Number(statsOverview.users_total).toLocaleString('fa-IR')}
+                    </div>
+                  </div>
+
+                  <div className="glass-card rounded-2xl p-4">
+                    <div className="text-xs text-gray-400 mb-1">📦 در انتظار</div>
+                    <div className="text-lg font-bold text-warning-400" dir="ltr">
+                      {Number(statsOverview.pending_orders).toLocaleString('fa-IR')}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      شارژ: {Number(statsOverview.pending_topups).toLocaleString('fa-IR')}
+                    </div>
+                  </div>
+
+                  <div className="glass-card rounded-2xl p-4">
+                    <div className="text-xs text-gray-400 mb-1">🤝 همکاران</div>
+                    <div className="text-lg font-bold text-amber-400" dir="ltr">
+                      {Number(statsOverview.partner_count).toLocaleString('fa-IR')}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      تیکت باز: {Number(statsOverview.open_tickets).toLocaleString('fa-IR')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* KPI Cards ردیف دوم */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="glass-card rounded-2xl p-4">
+                    <div className="text-xs text-gray-400 mb-1">💳 کل شارژ کیف</div>
+                    <div className="text-sm font-bold text-cyan-400" dir="ltr">
+                      {Number(statsOverview.wallet_charged).toLocaleString('fa-IR')}
+                    </div>
+                  </div>
+                  <div className="glass-card rounded-2xl p-4">
+                    <div className="text-xs text-gray-400 mb-1">🛒 کل خرید والت</div>
+                    <div className="text-sm font-bold text-purple-400" dir="ltr">
+                      {Number(statsOverview.wallet_spent).toLocaleString('fa-IR')}
+                    </div>
+                  </div>
+                  <div className="glass-card rounded-2xl p-4">
+                    <div className="text-xs text-gray-400 mb-1">📊 اشتراک فعال</div>
+                    <div className="text-sm font-bold text-success-400" dir="ltr">
+                      {Number(statsOverview.active_subscriptions).toLocaleString('fa-IR')}
+                    </div>
+                  </div>
+                  <div className="glass-card rounded-2xl p-4">
+                    <div className="text-xs text-gray-400 mb-1">💰 مجموع موجودی</div>
+                    <div className="text-sm font-bold text-amber-400" dir="ltr">
+                      {Number(statsOverview.wallet_balance).toLocaleString('fa-IR')}
+                    </div>
+                  </div>
+                </div>
+
+                {/* نمودار فروش روزانه */}
+                <div className="glass-card rounded-2xl p-5">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-white text-sm">📈 فروش روزانه ({statsDays} روز اخیر)</h3>
+                    <span className="text-xs text-gray-500">
+                      کل: {statsChart.reduce((s, d) => s + d.sales, 0).toLocaleString('fa-IR')} تومان
+                    </span>
+                  </div>
+                  {statsChart.length > 0 ? (
+                    <div style={{ height: '220px' }}>
+                      <Line
+                        data={{
+                          labels: statsChart.map((d) => {
+                            const dt = new Date(d.day)
+                            return dt.toLocaleDateString('fa-IR', { month: '2-digit', day: '2-digit' })
+                          }),
+                          datasets: [
+                            {
+                              label: 'فروش (تومان)',
+                              data: statsChart.map((d) => d.sales),
+                              borderColor: '#06b6d4',
+                              backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                              fill: true,
+                              tension: 0.4,
+                              pointRadius: 2,
+                              pointHoverRadius: 5,
+                            },
+                          ],
+                        }}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                              rtl: true,
+                              titleAlign: 'right',
+                              bodyAlign: 'right',
+                              callbacks: {
+                                label: (ctx) => ' ' + Number(ctx.parsed.y).toLocaleString('fa-IR') + ' تومان',
+                              },
+                            },
+                          },
+                          scales: {
+                            x: {
+                              ticks: { color: '#64748b', font: { size: 10 } },
+                              grid: { color: 'rgba(100, 116, 139, 0.1)' },
+                            },
+                            y: {
+                              ticks: {
+                                color: '#64748b',
+                                font: { size: 10 },
+                                callback: (v: any) => Number(v).toLocaleString('fa-IR'),
+                              },
+                              grid: { color: 'rgba(100, 116, 139, 0.1)' },
+                              beginAtZero: true,
+                            },
+                          },
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-center text-gray-500 text-sm py-8">داده‌ای موجود نیست</p>
+                  )}
+                </div>
+
+                {/* نمودار کاربران جدید */}
+                <div className="glass-card rounded-2xl p-5">
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold text-white text-sm">👥 کاربران جدید روزانه</h3>
+                    <span className="text-xs text-gray-500">
+                      کل: {statsChart.reduce((s, d) => s + d.new_users, 0).toLocaleString('fa-IR')}
+                    </span>
+                  </div>
+                  {statsChart.length > 0 ? (
+                    <div style={{ height: '180px' }}>
+                      <Bar
+                        data={{
+                          labels: statsChart.map((d) => {
+                            const dt = new Date(d.day)
+                            return dt.toLocaleDateString('fa-IR', { month: '2-digit', day: '2-digit' })
+                          }),
+                          datasets: [
+                            {
+                              label: 'کاربر جدید',
+                              data: statsChart.map((d) => d.new_users),
+                              backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                              borderRadius: 4,
+                            },
+                          ],
+                        }}
+                        options={{
+                          responsive: true,
+                          maintainAspectRatio: false,
+                          plugins: {
+                            legend: { display: false },
+                            tooltip: { rtl: true, titleAlign: 'right', bodyAlign: 'right' },
+                          },
+                          scales: {
+                            x: {
+                              ticks: { color: '#64748b', font: { size: 10 } },
+                              grid: { display: false },
+                            },
+                            y: {
+                              ticks: { color: '#64748b', font: { size: 10 }, stepSize: 1 },
+                              grid: { color: 'rgba(100, 116, 139, 0.1)' },
+                              beginAtZero: true,
+                            },
+                          },
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-center text-gray-500 text-sm py-8">داده‌ای موجود نیست</p>
+                  )}
+                </div>
+
+                {/* پلن‌های پرفروش */}
+                <div className="glass-card rounded-2xl p-5">
+                  <h3 className="font-bold text-white text-sm mb-4">📊 فروش پلن‌ها</h3>
+                  {statsPlans.length > 0 ? (
+                    <div className="space-y-3">
+                      {statsPlans.map((p, i) => {
+                        const maxSales = Math.max(...statsPlans.map((x) => x.sales), 1)
+                        const percent = (p.sales / maxSales) * 100
+                        return (
+                          <div key={p.plan_code}>
+                            <div className="flex justify-between items-center mb-1 text-sm">
+                              <span className="text-white font-semibold">{p.plan_name}</span>
+                              <span className="text-xs text-gray-400">
+                                {p.orders} سفارش · {Number(p.sales).toLocaleString('fa-IR')} تومان
+                              </span>
+                            </div>
+                            <div className="h-2 bg-navy-800/60 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-500 ${
+                                  i === 0
+                                    ? 'bg-gradient-to-r from-amber-400 to-amber-500'
+                                    : 'bg-gradient-to-r from-primary-500 to-primary-600'
+                                }`}
+                                style={{ width: `${percent}%` }}
+                              />
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-center text-gray-500 text-sm py-4">داده‌ای موجود نیست</p>
+                  )}
+                </div>
+
+                {/* لیدربورد همکارها */}
+                <div className="glass-card rounded-2xl p-5">
+                  <h3 className="font-bold text-white text-sm mb-4">🏆 همکاران برتر ({statsDays} روز اخیر)</h3>
+                  {statsPartners.length > 0 ? (
+                    <div className="space-y-2">
+                      {statsPartners.map((p, i) => (
+                        <div
+                          key={p.telegram_id}
+                          className="flex items-center gap-3 p-3 rounded-xl bg-navy-800/40 border border-navy-700/30"
+                        >
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                            i === 0 ? 'bg-gradient-to-br from-amber-400 to-amber-500 text-white' :
+                            i === 1 ? 'bg-gradient-to-br from-gray-300 to-gray-400 text-white' :
+                            i === 2 ? 'bg-gradient-to-br from-orange-400 to-orange-500 text-white' :
+                            'bg-navy-700/60 text-gray-300'
+                          }`}>
+                            {i + 1}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white text-sm font-semibold truncate">
+                              {p.first_name}
+                              {p.username && <span className="text-gray-500 text-xs mr-2">@{p.username}</span>}
+                            </div>
+                            <div className="text-xs text-gray-500 font-mono" dir="ltr">{p.telegram_id}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-bold text-success-400" dir="ltr">
+                              {Number(p.sales).toLocaleString('fa-IR')}
+                            </div>
+                            <div className="text-xs text-gray-500">{p.orders} سفارش</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center text-gray-500 text-sm py-4">در این بازه همکاری خرید نکرده</p>
+                  )}
+                </div>
+
+                {/* آمار کیف پول */}
+                {statsWallet && (
+                  <div className="glass-card rounded-2xl p-5">
+                    <h3 className="font-bold text-white text-sm mb-4">💰 آمار کیف پول</h3>
+                    <div className="grid grid-cols-2 gap-3 mb-4">
+                      <div className="p-3 rounded-xl bg-navy-800/40">
+                        <div className="text-xs text-gray-400">کل واریز</div>
+                        <div className="text-sm font-bold text-success-400 mt-1" dir="ltr">
+                          {Number(statsWallet.summary.total_in).toLocaleString('fa-IR')}
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-navy-800/40">
+                        <div className="text-xs text-gray-400">کل برداشت</div>
+                        <div className="text-sm font-bold text-error-400 mt-1" dir="ltr">
+                          {Number(statsWallet.summary.total_out).toLocaleString('fa-IR')}
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-navy-800/40">
+                        <div className="text-xs text-gray-400">تعداد تراکنش</div>
+                        <div className="text-sm font-bold text-white mt-1" dir="ltr">
+                          {Number(statsWallet.summary.txn_count).toLocaleString('fa-IR')}
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-navy-800/40">
+                        <div className="text-xs text-gray-400">شارژ تأیید شده</div>
+                        <div className="text-sm font-bold text-primary-400 mt-1" dir="ltr">
+                          {Number(statsWallet.summary.approved_topups_total).toLocaleString('fa-IR')}
+                        </div>
+                      </div>
+                    </div>
+
+                    {statsWallet.types.length > 0 && (
+                      <>
+                        <div className="text-xs text-gray-400 mb-2">توزیع انواع تراکنش</div>
+                        <div className="space-y-1.5">
+                          {statsWallet.types.map((t) => (
+                            <div key={t.type} className="flex justify-between text-xs py-1.5 border-b border-navy-700/30 last:border-0">
+                              <span className="text-gray-300 font-mono" dir="ltr">{t.type}</span>
+                              <span className="text-gray-400">
+                                {t.cnt} مورد · <span className="text-white">{Number(t.total).toLocaleString('fa-IR')}</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </>
