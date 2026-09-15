@@ -2384,8 +2384,8 @@ export default function AdminDashboard() {
                             {
                               label: 'فروش (تومان)',
                               data: statsChart.map((d) => d.sales),
-                              borderColor: '#06b6d4',
-                              backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                              borderColor: '#3B82F6',
+                              backgroundColor: 'rgba(59, 130, 246, 0.15)',
                               fill: true,
                               tension: 0.4,
                               pointRadius: 2,
@@ -2450,7 +2450,7 @@ export default function AdminDashboard() {
                             {
                               label: 'کاربر جدید',
                               data: statsChart.map((d) => d.new_users),
-                              backgroundColor: 'rgba(139, 92, 246, 0.7)',
+                              backgroundColor: 'rgba(56, 189, 248, 0.7)',
                               borderRadius: 4,
                             },
                           ],
@@ -2905,12 +2905,13 @@ export default function AdminDashboard() {
                     <label className="block text-xs text-gray-400 mb-1">سقف هر کاربر</label>
                     <input
                       type="number"
-                      min={1}
+                      min={0}
                       value={discountForm.max_uses_per_user}
                       onChange={(e) => setDiscountForm({ ...discountForm, max_uses_per_user: Number(e.target.value) })}
                       className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                       dir="ltr"
                     />
+                    <p className="text-xs text-gray-500 mt-1">0 = نامحدود</p>
                   </div>
                 </div>
 
@@ -3047,12 +3048,13 @@ export default function AdminDashboard() {
                   <div>
                     <label className="block text-xs text-gray-400 mb-1">سقف هر کاربر</label>
                     <input
-                      type="number" min={1}
+                      type="number" min={0}
                       value={editForm.max_uses_per_user}
                       onChange={(e) => setEditForm({ ...editForm, max_uses_per_user: Number(e.target.value) })}
                       className="w-full px-3 py-2.5 rounded-xl bg-navy-900/60 border border-navy-600/50 text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/40"
                       dir="ltr"
                     />
+                    <p className="text-xs text-gray-500 mt-1">0 = نامحدود</p>
                   </div>
                 </div>
 
