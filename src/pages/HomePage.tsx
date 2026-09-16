@@ -44,6 +44,26 @@ export default function HomePage() {
     }
   }
 
+  const downloadConfig = (proto: 'tcp' | 'udp') => {
+    // fallback: user?.telegram_id یا Telegram.WebApp.initDataUnsafe
+    const tgId = Number(user?.telegram_id) ||
+      Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0
+
+    if (!tgId) {
+      console.warn('[download] No telegram id available')
+      return
+    }
+
+    const url = `https://varminiapp.popserver.shop/api/?action=download_config&telegram_id=${tgId}&proto=${proto}`
+
+    const tg = (window as any).Telegram?.WebApp
+    if (tg?.openLink) {
+      tg.openLink(url)
+    } else {
+      window.open(url, '_blank')
+    }
+  }
+
   const externalRef = typeof initDataUnsafe.user === 'object'
     ? (initDataUnsafe.user as any)?.id?.toString()
     : null
@@ -274,24 +294,26 @@ export default function HomePage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2 mt-3">
-                      <a
-                        href={`https://varminiapp.popserver.shop/api/?action=download_config&telegram_id=${user?.telegram_id}&proto=tcp`}
+                      <button
+                        type="button"
+                        onClick={() => downloadConfig('tcp')}
                         className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 text-white text-sm font-semibold hover:from-blue-400 hover:to-blue-500 transition-all duration-300 shadow-lg shadow-blue-500/20"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
                         دانلود TCP
-                      </a>
-                      <a
-                        href={`https://varminiapp.popserver.shop/api/?action=download_config&telegram_id=${user?.telegram_id}&proto=udp`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => downloadConfig('udp')}
                         className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-green-500 to-green-600 text-white text-sm font-semibold hover:from-green-400 hover:to-green-500 transition-all duration-300 shadow-lg shadow-green-500/20"
                       >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
                         دانلود UDP
-                      </a>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -350,6 +372,3 @@ export default function HomePage() {
     </div>
   )
 }
-
-
-

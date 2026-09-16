@@ -31,25 +31,49 @@ export function TelegramProvider({ children }: { children: React.ReactNode }) {
   const [tg, setTg] = useState<typeof window.Telegram.WebApp | null>(null)
 
   useEffect(() => {
-    if (!window.Telegram?.WebApp) return
+    let tries = 0
+    const maxTries = 50  // 50 × 200ms = 10 ثانیه
 
-    const webApp = window.Telegram.WebApp
+    const initTelegram = () => {
+      const webApp = (window as any).Telegram?.WebApp
 
-    setTg(webApp)
-    setInitData(webApp.initData || null)
-    setInitDataUnsafe(webApp.initDataUnsafe as Record<string, unknown>)
-    setUser(webApp.initDataUnsafe?.user || null)
-    setIsDark(webApp.theme_params?.scheme === 'dark')
-    setTheme(webApp.theme_params || {})
+      if (webApp) {
+        console.log('[useTelegram] WebApp found after', tries, 'tries')
+        console.log('[useTelegram] initData length:', webApp.initData?.length || 0)
 
-    webApp.ready()
-    setTelegramViewport()
+        setTg(webApp)
+        setInitData(webApp.initData || null)
+        setInitDataUnsafe(webApp.initDataUnsafe || {})
+        setUser(webApp.initDataUnsafe?.user || null)
+        setIsDark(webApp.theme_params?.scheme === 'dark')
+        setTheme(webApp.theme_params || {})
 
-    webApp.themeParamsDidChange?.subscribe(() => {
-      setIsDark(webApp.theme_params?.scheme === 'dark')
-      setTheme(webApp.theme_params || {})
-    })
+        try {
+          webApp.ready()
+          setTelegramViewport()
+        } catch (e) {
+          console.warn('[useTelegram] ready/viewport error:', e)
+        }
 
+        try {
+          webApp.themeParamsDidChange?.subscribe(() => {
+            setIsDark(webApp.theme_params?.scheme === 'dark')
+            setTheme(webApp.theme_params || {})
+          })
+        } catch (e) {}
+
+        return
+      }
+
+      tries += 1
+      if (tries < maxTries) {
+        setTimeout(initTelegram, 200)
+      } else {
+        console.warn('[useTelegram] Telegram WebApp not available after 10s')
+      }
+    }
+
+    initTelegram()
   }, [])
 
   return (

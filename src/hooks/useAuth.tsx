@@ -88,14 +88,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // صبر برای آماده شدن initData (تا ۲ ثانیه)
+    // صبر برای آماده شدن initData (تا ۱۰ ثانیه)
     let tries = 0
-    const maxTries = 10
+    const maxTries = 50  // 10 ثانیه
 
     const tryAuth = () => {
-      const initData = (window as any).Telegram?.WebApp?.initData
+      const tg = (window as any).Telegram?.WebApp
+      const initData = tg?.initData
+
       if (initData && initData.length > 10) {
-        console.log('initData found, length=', initData.length)
+        console.log('[useAuth] initData found after', tries, 'tries, length:', initData.length)
         login(initData)
         return
       }
@@ -104,7 +106,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (tries < maxTries) {
         setTimeout(tryAuth, 200)
       } else {
-        console.warn('No Telegram initData after retries')
+        console.warn('[useAuth] No Telegram initData after 10 seconds')
+        console.warn('[useAuth] Telegram object:', !!tg)
+        console.warn('[useAuth] initData:', initData)
         setIsLoading(false)
       }
     }
