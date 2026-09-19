@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useTelegram } from '@/hooks/useTelegram'
+import { useTheme } from '@/hooks/useTheme'
 import { cn } from '@/utils/cn'
 
 interface TelegramAppProps {
@@ -7,7 +8,8 @@ interface TelegramAppProps {
 }
 
 export default function TelegramApp({ children }: TelegramAppProps) {
-  const { tg, isDark } = useTelegram()
+  const { tg } = useTelegram()
+  const { theme } = useTheme()
 
   useEffect(() => {
     if (!tg) return
@@ -32,26 +34,23 @@ export default function TelegramApp({ children }: TelegramAppProps) {
     }
   }, [tg])
 
-  useEffect(() => {
-    if (!tg) return
-    const html = document.documentElement
-    if (isDark) {
-      html.dataset.theme = 'dark'
-      html.classList.add('dark')
-    } else {
-      html.dataset.theme = 'light'
-      html.classList.remove('dark')
-    }
-  }, [tg, isDark])
-
   return (
     <div
       className={cn(
-        'min-h-screen transition-colors duration-300 app-bg',
-        isDark ? 'text-gray-100' : 'bg-navy-50 text-navy-900'
+        'min-h-screen transition-all duration-500 app-bg relative',
+        theme === 'dark' ? 'text-slate-50' : 'text-slate-900'
       )}
+      style={{ fontFamily: 'Vazirmatn, Outfit, sans-serif' }}
     >
-      <div className="w-full max-w-4xl mx-auto">{children}</div>
+      {/* Mesh gradient orbs - decorative */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute -top-[30%] -right-[20%] w-[80%] h-[80%] rounded-full blur-[120px] opacity-[0.15] bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-500 animate-float" />
+        <div className="absolute -bottom-[20%] -left-[20%] w-[70%] h-[70%] rounded-full blur-[120px] opacity-[0.10] bg-gradient-to-br from-cyan-500 via-blue-500 to-violet-500 animate-float" style={{ animationDelay: '2s' }} />
+      </div>
+
+      <div className="relative z-10 w-full max-w-5xl mx-auto">
+        {children}
+      </div>
     </div>
   )
 }

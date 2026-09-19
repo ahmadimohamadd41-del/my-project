@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '@/hooks/useAuth'
+import { useTheme } from '@/hooks/useTheme'
+import ThemeToggle from '@/components/ThemeToggle'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -224,6 +226,8 @@ const API = 'https://varminiapp.popserver.shop/api'
 
 export default function AdminDashboard() {
   const { user, isLoading: authLoading } = useAuth()
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
 
   const [tgId, setTgId] = useState(0)
   const [tgReady, setTgReady] = useState(false)
@@ -1434,83 +1438,72 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen app-bg p-4">
-      <div className="max-w-2xl mx-auto animate-fade-in">
-        <h1 className="text-xl font-bold text-white mb-1">پنل ادمین</h1>
-        <p className="text-sm text-gray-400 mb-6">مدیریت سفارش‌ها، پلن‌ها و کاربران</p>
+    <div className="min-h-screen app-bg p-4 lg:p-8">
+      <div className="max-w-6xl mx-auto animate-fade-in relative z-10">
+        {/* Header - Masterpiece */}
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-xl font-black backdrop-blur-xl border shadow-lg ${isDark ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white border-white/10' : 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white border-white/20'}`}>A</div>
+            <div>
+              <h1 className={`text-[22px] font-black tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`} style={{ fontFamily: 'Vazirmatn' }}>پنل ادمین VAR</h1>
+              <p className={`text-[11px] font-bold tracking-[0.15em] mt-1 ${isDark ? 'text-white/40' : 'text-slate-400'}`}>ADMIN DASHBOARD • مدیریت کامل سیستم</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <ThemeToggle />
+            <Link to="/" className={`w-11 h-11 rounded-2xl backdrop-blur-xl border flex items-center justify-center transition-all hover:scale-105 ${isDark ? 'bg-white/[0.06] border-white/[0.08] text-white/70' : 'bg-white/70 border-black/[0.06] text-slate-600 shadow-sm'}`}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
+            </Link>
+          </div>
+        </div>
 
-        {/* Tabs */}
-        <div className="flex gap-2 mb-5 p-1 rounded-xl bg-navy-900/60 border border-navy-700/40 w-fit flex-wrap">
-          <button
-            onClick={() => { setTab('orders'); loadOrders() }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'orders' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            سفارش‌ها
-          </button>
-          <button
-            onClick={() => { setTab('plans'); loadPlans() }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'plans' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            پلن‌ها
-          </button>
-          <button
-            onClick={() => { setTab('tickets'); loadTickets() }}
-            className={`relative px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'tickets' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            تیکت‌ها
-            {needsReplyCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-error-500 text-white text-xs font-bold border-2 border-navy-900">
-                {needsReplyCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => { setTab('templates'); loadTemplates() }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'templates' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            پیام‌ها
-          </button>
-          <button
-            onClick={() => setTab('wallet')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'wallet' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            کیف پول
-          </button>
-          <button
-            onClick={() => { setTab('topups'); loadTopups() }}
-            className={`relative px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'topups' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            شارژها
-            {topupsPendingCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-warning-500 text-white text-xs font-bold border-2 border-navy-900">
-                {topupsPendingCount}
-              </span>
-            )}
-          </button>
-          <button
-            onClick={() => { setTab('discount'); loadDiscounts() }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'discount' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            کد تخفیف
-          </button>
-          <button
-            onClick={() => { setTab('stats'); loadStats() }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'stats' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            گزارش‌ها
-          </button>
-          <button
-            onClick={() => setTab('settings')}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'settings' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            تنظیمات
-          </button>
-          <button
-            onClick={() => { setTab('users'); loadUsers() }}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-300 ${tab === 'users' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'text-gray-400 hover:text-gray-200'}`}
-          >
-            کاربران
-          </button>
+        {/* Tabs - Masterpiece pill design */}
+        <div className={`flex gap-2 mb-8 p-2 rounded-[20px] backdrop-blur-2xl border w-fit flex-wrap shadow-lg max-w-full overflow-x-auto ${isDark ? 'bg-white/[0.04] border-white/[0.06]' : 'bg-white/70 border-black/[0.06] shadow-[0_4px_20px_rgba(0,0,0,0.05)]'}`}>
+          {[
+            { id: 'orders', label: 'سفارش‌ها', icon: '📦' },
+            { id: 'plans', label: 'پلن‌ها', icon: '💎' },
+            { id: 'tickets', label: 'تیکت‌ها', icon: '🎫', badge: needsReplyCount },
+            { id: 'templates', label: 'پیام‌ها', icon: '💬' },
+            { id: 'wallet', label: 'کیف پول', icon: '💰' },
+            { id: 'topups', label: 'شارژها', icon: '💳', badge: topupsPendingCount, badgeColor: 'bg-amber-500' },
+            { id: 'discount', label: 'تخفیف', icon: '🎁' },
+            { id: 'stats', label: 'گزارش‌ها', icon: '📊' },
+            { id: 'settings', label: 'تنظیمات', icon: '⚙️' },
+            { id: 'users', label: 'کاربران', icon: '👥' },
+          ].map((t) => {
+            const isActive = tab === t.id
+            return (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTab(t.id as any)
+                  if (t.id === 'orders') loadOrders()
+                  if (t.id === 'plans') loadPlans()
+                  if (t.id === 'tickets') loadTickets()
+                  if (t.id === 'templates') loadTemplates()
+                  if (t.id === 'topups') loadTopups()
+                  if (t.id === 'discount') loadDiscounts()
+                  if (t.id === 'stats') loadStats()
+                  if (t.id === 'users') loadUsers()
+                }}
+                className={`relative px-4 py-2.5 rounded-xl text-[13px] font-black tracking-wide transition-all duration-400 flex items-center gap-2 border ${
+                  isActive
+                    ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white border-violet-500/30 shadow-[0_4px_16px_rgba(99,102,241,0.3)] scale-[1.02]'
+                    : isDark
+                      ? 'bg-white/[0.03] border-white/[0.04] text-white/50 hover:bg-white/[0.06] hover:border-white/[0.08] hover:text-white/80'
+                      : 'bg-white/50 border-black/[0.04] text-slate-500 hover:bg-white hover:text-slate-700 shadow-sm'
+                }`}
+              >
+                <span className="text-[13px]">{t.icon}</span>
+                {t.label}
+                {t.badge && t.badge > 0 ? (
+                  <span className={`min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full text-white text-[10px] font-black ${t.badgeColor || 'bg-red-500'} shadow-md`}>
+                    {t.badge}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
         </div>
 
         {message && (
