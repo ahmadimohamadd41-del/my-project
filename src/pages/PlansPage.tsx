@@ -60,6 +60,9 @@ export default function PlansPage() {
   } | null>(null)
   const [gatewaySubmitting, setGatewaySubmitting] = useState(false)
   const [gatewayError, setGatewayError] = useState('')
+  const [gatewayChecking, setGatewayChecking] = useState(false)
+  const [gatewayCheckMessage, setGatewayCheckMessage] = useState<{ type: 'ok' | 'error' | 'info'; text: string } | null>(null)
+  const [gatewayOrderId, setGatewayOrderId] = useState<number | null>(null)
 
   // جلوگیری از ثبت تکراری
   const submittingRef = useRef(false)
@@ -150,6 +153,9 @@ export default function PlansPage() {
         setWalletBalance(null)
         setGatewayData(null)
         setGatewayError('')
+        setGatewayChecking(false)
+        setGatewayCheckMessage(null)
+        setGatewayOrderId(null)
       }, 3000)
     } catch (e: any) {
       setFormError('خطا در ثبت سفارش: ' + (e?.response?.data?.error || e.message))
@@ -281,6 +287,9 @@ export default function PlansPage() {
     setWalletBalance(null)
     setGatewayData(null)
     setGatewayError('')
+    setGatewayChecking(false)
+    setGatewayCheckMessage(null)
+    setGatewayOrderId(null)
     // دریافت موجودی کیف پول
     if (tgId) {
       setWalletBalanceLoading(true)
@@ -307,6 +316,46 @@ export default function PlansPage() {
     setWalletBalance(null)
     setGatewayData(null)
     setGatewayError('')
+    setGatewayChecking(false)
+    setGatewayCheckMessage(null)
+    setGatewayOrderId(null)
+  }
+
+  const checkGatewayPayment = async () => {
+    if (!gatewayOrderId) return
+    const telegramId = Number(user?.telegram_id) ||
+      Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0
+    if (!telegramId) return
+
+    setGatewayChecking(true)
+    setGatewayCheckMessage(null)
+    try {
+      const res = await fetch(
+        `https://varminiapp.popserver.shop/api/?action=gateway_check&order_id=${gatewayOrderId}&telegram_id=${telegramId}`
+      )
+      const data = await res.json()
+      if (data.status === 'PAID') {
+        setGatewayCheckMessage({
+          type: 'ok',
+          text: '✅ پرداخت تأیید شد! سرویس شما در حال فعال‌سازی است...',
+        })
+        setTimeout(() => closePurchaseModal(), 3000)
+      } else if (data.status === 'PENDING') {
+        setGatewayCheckMessage({
+          type: 'info',
+          text: '⏳ پرداخت هنوز تأیید نشده. اگه پرداخت کردید، ۱-۲ دقیقه دیگه دوباره امتحان کنید.',
+        })
+      } else {
+        setGatewayCheckMessage({
+          type: 'error',
+          text: data.message || data.error || 'وضعیت نامشخص',
+        })
+      }
+    } catch (e: any) {
+      setGatewayCheckMessage({ type: 'error', text: 'خطای شبکه' })
+    } finally {
+      setGatewayChecking(false)
+    }
   }
 
   const handleGatewayPurchase = async () => {
@@ -338,6 +387,7 @@ export default function PlansPage() {
           card_number: data.card_number,
           expires_at: data.expires_at,
         })
+        setGatewayOrderId(Number(data.order?.id || 0))
       } else {
         setGatewayError(data.error || 'خطا در ایجاد فاکتور')
       }
@@ -528,26 +578,34 @@ export default function PlansPage() {
 
                         {!gatewayData ? (
                           <div className="mb-5 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-gray-300 space-y-2">
-                            <p className="font-semibold text-amber-300">🚀 پرداخت آنلاین</p>
-                            <p>با این روش، فاکتور پرداخت ایجاد می‌شه و به صفحه پرداخت هدایت می‌شید.</p>
-                            <p>سرویس شما <b>بلافاصله</b> بعد از پرداخت فعال می‌شه.</p>
+                            <p className="font-semibold text-amber-300 text-center">🚀 پرداخت آنلاین</p>
+                            <p className="text-center">با این روش، فاکتور پرداخت ایجاد می‌شه و به صفحه پرداخت هدایت می‌شید.</p>
+                            <div className="p-2.5 rounded-lg bg-navy-900/60 space-y-1 text-[11px]">
+                              <p>✅ پرداخت از <b className="text-white">موبایل بانک</b> یا <b className="text-white">خودپرداز</b></p>
+                              <p>✅ اعتبار فاکتور: <b className="text-warning-400">۳۰ دقیقه</b></p>
+                              <p>✅ فعال‌سازی فوری بعد از پرداخت</p>
+                            </div>
                           </div>
                         ) : (
                           <div className="mb-5 p-4 rounded-xl bg-success-500/10 border border-success-500/30 space-y-3">
-                            <div className="text-success-300 font-semibold text-sm">✅ فاکتور ایجاد شد</div>
+                            <div className="text-success-300 font-semibold text-sm text-center">✅ فاکتور ایجاد شد</div>
 
                             <div className="p-3 rounded-xl bg-navy-900/60 space-y-2 text-xs">
                               <div className="flex justify-between">
                                 <span className="text-gray-400">شماره فاکتور:</span>
                                 <span className="text-white font-mono" dir="ltr">{gatewayData.invoice_id}</span>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-400">مبلغ نهایی:</span>
-                                <span className="text-amber-300 font-bold">{gatewayData.final_amount_toman.toLocaleString('fa-IR')} تومان</span>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-400">مبلغ قابل پرداخت:</span>
+                                <span className="text-amber-300 font-bold text-base">
+                                  {gatewayData.final_amount_toman.toLocaleString('fa-IR')} تومان
+                                </span>
                               </div>
                               <div className="flex justify-between">
-                                <span className="text-gray-400">به ریال:</span>
-                                <span className="text-gray-300 font-mono text-xs" dir="ltr">{gatewayData.final_amount_rial.toLocaleString('en-US')}</span>
+                                <span className="text-gray-500 text-[10px]">معادل:</span>
+                                <span className="text-gray-500 font-mono text-[10px]" dir="ltr">
+                                  {gatewayData.final_amount_rial.toLocaleString('en-US')} ریال
+                                </span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-gray-400">شماره کارت:</span>
@@ -555,8 +613,14 @@ export default function PlansPage() {
                               </div>
                             </div>
 
-                            <div className="p-3 rounded-xl bg-warning-500/10 border border-warning-500/30 text-warning-300 text-xs">
-                              ⚠️ دقیقاً <b>مبلغ نهایی</b> رو واریز کنید.
+                            <div className="p-3 rounded-xl bg-primary-500/10 border border-primary-500/20 text-xs text-gray-300 space-y-2">
+                              <p className="font-semibold text-primary-300 text-center">📱 راهنمای پرداخت</p>
+                              <div className="space-y-1.5">
+                                <p>💳 از <b className="text-white">موبایل بانک</b> یا <b className="text-white">خودپرداز (ATM)</b> پرداخت کنید</p>
+                                <p>⏱ این فاکتور <b className="text-warning-400">۳۰ دقیقه</b> اعتبار داره</p>
+                                <p>📌 توی صفحه پرداخت، مبلغ به <b className="text-white">ریال</b> نمایش داده می‌شه</p>
+                                <p>⚠️ دقیقاً <b className="text-warning-300">مبلغ نهایی</b> رو واریز کنید (نه کمتر، نه بیشتر)</p>
+                              </div>
                             </div>
 
                             <a
@@ -568,8 +632,30 @@ export default function PlansPage() {
                               🚀 رفتن به صفحه پرداخت
                             </a>
 
-                            <p className="text-xs text-gray-500 text-center">
-                              بعد از پرداخت، صفحه رو ببندید و منتظر تأیید خودکار باشید
+                            <button
+                              type="button"
+                              onClick={checkGatewayPayment}
+                              disabled={gatewayChecking}
+                              className="w-full py-2.5 rounded-xl bg-navy-800/60 border border-primary-500/30 text-primary-300 text-sm font-semibold hover:border-primary-500/50 transition disabled:opacity-50"
+                            >
+                              {gatewayChecking ? '⏳ در حال بررسی...' : '🔍 پرداخت کردم — بررسی وضعیت'}
+                            </button>
+
+                            {gatewayCheckMessage && (
+                              <div className={`p-3 rounded-xl text-xs ${
+                                gatewayCheckMessage.type === 'ok'
+                                  ? 'bg-success-500/10 border border-success-500/30 text-success-300'
+                                  : gatewayCheckMessage.type === 'error'
+                                    ? 'bg-error-500/10 border border-error-500/30 text-error-300'
+                                    : 'bg-warning-500/10 border border-warning-500/30 text-warning-300'
+                              }`}>
+                                {gatewayCheckMessage.text}
+                              </div>
+                            )}
+
+                            <p className="text-[10px] text-gray-500 text-center leading-relaxed">
+                              بعد از پرداخت، مرورگر رو ببندید و به تلگرام برگردید.<br />
+                              سرویس شما ظرف ۳۰ ثانیه خودکار فعال می‌شه.
                             </p>
                           </div>
                         )}
