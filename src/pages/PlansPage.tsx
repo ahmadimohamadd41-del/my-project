@@ -348,13 +348,6 @@ export default function PlansPage() {
     }
   }
 
-  const openGatewayPaymentLink = () => {
-    if (!gatewayData?.payment_link) return
-    const tg = (window as any).Telegram?.WebApp
-    if (tg?.openLink) tg.openLink(gatewayData.payment_link)
-    else window.open(gatewayData.payment_link, '_blank')
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center app-bg">
@@ -566,13 +559,14 @@ export default function PlansPage() {
                               ⚠️ دقیقاً <b>مبلغ نهایی</b> رو واریز کنید.
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={openGatewayPaymentLink}
-                              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-lg shadow-amber-500/20"
+                            <a
+                              href={gatewayData.payment_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-lg shadow-amber-500/20 text-center hover:from-amber-400 hover:to-orange-400 transition"
                             >
                               🚀 رفتن به صفحه پرداخت
-                            </button>
+                            </a>
 
                             <p className="text-xs text-gray-500 text-center">
                               بعد از پرداخت، صفحه رو ببندید و منتظر تأیید خودکار باشید
