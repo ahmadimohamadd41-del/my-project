@@ -44,10 +44,22 @@ export default function PlansPage() {
   // ─── پرداخت با کیف پول ───
   const [walletBalance, setWalletBalance] = useState<number | null>(null)
   const [walletBalanceLoading, setWalletBalanceLoading] = useState(false)
-  const [payMode, setPayMode] = useState<'card' | 'wallet'>('card')
+  const [payMode, setPayMode] = useState<'card' | 'wallet' | 'gateway'>('gateway')
   const [walletSubmitting, setWalletSubmitting] = useState(false)
   const [walletError, setWalletError] = useState('')
   const [walletSuccess, setWalletSuccess] = useState(false)
+
+  // ─── پرداخت آنلاین (gateway) ───
+  const [gatewayData, setGatewayData] = useState<{
+    payment_link: string
+    invoice_id: string
+    final_amount_rial: number
+    final_amount_toman: number
+    card_number: string
+    expires_at: string
+  } | null>(null)
+  const [gatewaySubmitting, setGatewaySubmitting] = useState(false)
+  const [gatewayError, setGatewayError] = useState('')
 
   // جلوگیری از ثبت تکراری
   const submittingRef = useRef(false)
@@ -132,10 +144,12 @@ export default function PlansPage() {
         setSuccessMessage(null)
         setRefNumber('')
         setPurchaseAttemptKey('')
-        setPayMode('card')
+        setPayMode('gateway')
         setWalletError('')
         setWalletSuccess(false)
         setWalletBalance(null)
+        setGatewayData(null)
+        setGatewayError('')
       }, 3000)
     } catch (e: any) {
       setFormError('خطا در ثبت سفارش: ' + (e?.response?.data?.error || e.message))
@@ -260,11 +274,13 @@ export default function PlansPage() {
     setDiscountInfo(null)
     setDiscountError('')
     setPurchaseAttemptKey(`ui-order-${Date.now()}-${tgId}`)
-    // ریست حالت پرداخت کیف پول
-    setPayMode('card')
+    // ریست حالت پرداخت
+    setPayMode('gateway')
     setWalletError('')
     setWalletSuccess(false)
     setWalletBalance(null)
+    setGatewayData(null)
+    setGatewayError('')
     // دریافت موجودی کیف پول
     if (tgId) {
       setWalletBalanceLoading(true)
@@ -285,10 +301,58 @@ export default function PlansPage() {
     setRefNumber('')
     setFormError('')
     setPurchaseAttemptKey('')
-    setPayMode('card')
+    setPayMode('gateway')
     setWalletError('')
     setWalletSuccess(false)
     setWalletBalance(null)
+    setGatewayData(null)
+    setGatewayError('')
+  }
+
+  const handleGatewayPurchase = async () => {
+    if (!selectedPlan || gatewaySubmitting) return
+    const telegramId = Number(user?.telegram_id) ||
+      Number((window as any).Telegram?.WebApp?.initDataUnsafe?.user?.id) || 0
+    if (!telegramId) { setGatewayError('هویت تلگرام شناسایی نشد'); return }
+    setGatewaySubmitting(true)
+    setGatewayError('')
+    try {
+      const res = await fetch('https://varminiapp.popserver.shop/api/?action=create_order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan_code: selectedPlan.plan_code,
+          telegram_id: telegramId,
+          payment_method: 'gateway',
+          discount_code: discountInfo?.code || null,
+          idempotency_key: `ui-gateway-${Date.now()}-${telegramId}`,
+        }),
+      })
+      const data = await res.json()
+      if (data.ok && data.payment_link) {
+        setGatewayData({
+          payment_link: data.payment_link,
+          invoice_id: data.invoice_id,
+          final_amount_rial: data.final_amount_rial,
+          final_amount_toman: data.final_amount_toman,
+          card_number: data.card_number,
+          expires_at: data.expires_at,
+        })
+      } else {
+        setGatewayError(data.error || 'خطا در ایجاد فاکتور')
+      }
+    } catch (e: any) {
+      setGatewayError(e?.message || 'خطای شبکه')
+    } finally {
+      setGatewaySubmitting(false)
+    }
+  }
+
+  const openGatewayPaymentLink = () => {
+    if (!gatewayData?.payment_link) return
+    const tg = (window as any).Telegram?.WebApp
+    if (tg?.openLink) tg.openLink(gatewayData.payment_link)
+    else window.open(gatewayData.payment_link, '_blank')
   }
 
   if (loading) {
@@ -461,23 +525,87 @@ export default function PlansPage() {
                       </div>
                     )}
 
+                    {payMode === 'gateway' && (
+                      <>
+                        {gatewayError && (
+                          <div className="mb-3 p-3 rounded-xl bg-error-500/10 border border-error-500/30 text-error-300 text-sm">
+                            {gatewayError}
+                          </div>
+                        )}
+
+                        {!gatewayData ? (
+                          <div className="mb-5 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 text-xs text-gray-300 space-y-2">
+                            <p className="font-semibold text-amber-300">🚀 پرداخت آنلاین</p>
+                            <p>با این روش، فاکتور پرداخت ایجاد می‌شه و به صفحه پرداخت هدایت می‌شید.</p>
+                            <p>سرویس شما <b>بلافاصله</b> بعد از پرداخت فعال می‌شه.</p>
+                          </div>
+                        ) : (
+                          <div className="mb-5 p-4 rounded-xl bg-success-500/10 border border-success-500/30 space-y-3">
+                            <div className="text-success-300 font-semibold text-sm">✅ فاکتور ایجاد شد</div>
+
+                            <div className="p-3 rounded-xl bg-navy-900/60 space-y-2 text-xs">
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">شماره فاکتور:</span>
+                                <span className="text-white font-mono" dir="ltr">{gatewayData.invoice_id}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">مبلغ نهایی:</span>
+                                <span className="text-amber-300 font-bold">{gatewayData.final_amount_toman.toLocaleString('fa-IR')} تومان</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">به ریال:</span>
+                                <span className="text-gray-300 font-mono text-xs" dir="ltr">{gatewayData.final_amount_rial.toLocaleString('en-US')}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-400">شماره کارت:</span>
+                                <span className="text-white font-mono text-xs" dir="ltr">{gatewayData.card_number}</span>
+                              </div>
+                            </div>
+
+                            <div className="p-3 rounded-xl bg-warning-500/10 border border-warning-500/30 text-warning-300 text-xs">
+                              ⚠️ دقیقاً <b>مبلغ نهایی</b> رو واریز کنید.
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={openGatewayPaymentLink}
+                              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-bold shadow-lg shadow-amber-500/20"
+                            >
+                              🚀 رفتن به صفحه پرداخت
+                            </button>
+
+                            <p className="text-xs text-gray-500 text-center">
+                              بعد از پرداخت، صفحه رو ببندید و منتظر تأیید خودکار باشید
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    )}
+
                     {/* انتخاب روش پرداخت */}
                     <div className="mb-6">
                       <label className="block text-sm text-gray-300 mb-2">روش پرداخت</label>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <button
                           type="button"
-                          onClick={() => { setPayMode('card'); setWalletError('') }}
-                          className={`py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${payMode === 'card' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white glow-primary' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400'}`}
+                          onClick={() => { setPayMode('gateway'); setGatewayError(''); setGatewayData(null); setWalletError('') }}
+                          className={`py-2.5 rounded-xl text-xs font-semibold transition-all ${payMode === 'gateway' ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400'}`}
                         >
-                          💳 کارت‌به‌کارت
+                          🚀 آنلاین
                         </button>
                         <button
                           type="button"
-                          onClick={() => { setPayMode('wallet'); setWalletError('') }}
-                          className={`py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${payMode === 'wallet' ? 'bg-gradient-to-r from-success-500 to-success-600 text-white glow-primary' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400'}`}
+                          onClick={() => { setPayMode('wallet'); setGatewayError(''); setGatewayData(null); setWalletError('') }}
+                          className={`py-2.5 rounded-xl text-xs font-semibold transition-all ${payMode === 'wallet' ? 'bg-gradient-to-r from-success-500 to-success-600 text-white' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400'}`}
                         >
                           💰 کیف پول
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setPayMode('card'); setGatewayError(''); setGatewayData(null); setWalletError('') }}
+                          className={`py-2.5 rounded-xl text-xs font-semibold transition-all ${payMode === 'card' ? 'bg-gradient-to-r from-primary-500 to-primary-600 text-white' : 'bg-navy-800/60 border border-navy-700/40 text-gray-400'}`}
+                        >
+                          💳 کارت‌به‌کارت
                         </button>
                       </div>
                     </div>
@@ -605,11 +733,11 @@ export default function PlansPage() {
                   <Button
                     variant="ghost"
                     onClick={closePurchaseModal}
-                    disabled={submitting || walletSubmitting}
+                    disabled={submitting || walletSubmitting || gatewaySubmitting}
                   >
                     انصراف
                   </Button>
-                  {payMode === 'card' ? (
+                  {payMode === 'card' && (
                     <Button
                       variant="primary"
                       onClick={handlePurchase}
@@ -617,7 +745,8 @@ export default function PlansPage() {
                     >
                       ثبت و تأیید پرداخت
                     </Button>
-                  ) : (
+                  )}
+                  {payMode === 'wallet' && (
                     <Button
                       variant="primary"
                       onClick={handleWalletPurchase}
@@ -628,6 +757,15 @@ export default function PlansPage() {
                       }
                     >
                       💰 پرداخت از کیف پول
+                    </Button>
+                  )}
+                  {payMode === 'gateway' && !gatewayData && (
+                    <Button
+                      variant="primary"
+                      onClick={handleGatewayPurchase}
+                      loading={gatewaySubmitting}
+                    >
+                      🚀 ایجاد فاکتور پرداخت
                     </Button>
                   )}
                 </div>
